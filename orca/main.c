@@ -121,6 +121,9 @@ u8 scale, phase, divisor, chance, mixer;
 u16 counter[4] = {0, 0, 0, 0};
 u8 prevValue[4];
 static softTimer_t triggerTimer = { .next = NULL, .prev = NULL };
+static softTimer_t phaseTimer1 = { .next = NULL, .prev = NULL };
+static softTimer_t phaseTimer2 = { .next = NULL, .prev = NULL };
+static softTimer_t phaseTimer3 = { .next = NULL, .prev = NULL };
 
 u16 encoderDelta[4] = {0, 0, 0, 0};
 u8 valueToShow = 0;
@@ -164,6 +167,9 @@ void flash_read(void);
 void updateArc(bool updateTriggers, bool resetTriggers);
 void showValue(u8 value, bool updateTriggers, bool resetTriggers);
 static void triggerTimer_callback(void* o);
+static void phaseTimer1_callback(void* o);
+static void phaseTimer2_callback(void* o);
+static void phaseTimer3_callback(void* o);
 
 ////////////////////////////////////////////////////////////////////////////////
 // application clock code
@@ -180,8 +186,7 @@ void updateArc(bool updateTriggers, bool resetTriggers)
 		
 		for (u8 led = 0; led < 64; led++)
 		{
-			// adding 192 = 64*3 to cover negative values (phase can go up to 32 and enc is 4 max plus another 64 to cover -led)
-			u16 factor = (counter[enc] + 192 - led - phase*enc) / DIVISORS[divisor][enc]; 
+			u16 factor = (counter[enc] + 64 - led) / DIVISORS[divisor][enc]; 
 			realLed = (counter[enc] + 64 - led + 32) & 63;
 			next = factor & 1;
 			if (!prev && next)
@@ -231,10 +236,10 @@ void updateArc(bool updateTriggers, bool resetTriggers)
 	
 	if (monome_encs() == 2) // arc2
 	{
-		if (valueToShow == 1) // phase 0-32
+		if (valueToShow == 1) // phase 0-64
 		{
 			for (u8 led = 0; led < 64; led++)
-				monomeLedBuffer[63 - led] = led < (phase << 1) ? 12 : 0;
+				monomeLedBuffer[63 - led] = led < phase ? 12 : 0;
 		}
 		if (valueToShow == 2) // divisor 0-15
 		{
@@ -275,10 +280,10 @@ void updateArc(bool updateTriggers, bool resetTriggers)
 	}
 	else
 	{
-		if (valueToShow == 1 || valueToShow == 6) // phase 0-32
+		if (valueToShow == 1 || valueToShow == 6) // phase 0-64
 		{
 			for (u8 led = 0; led < 64; led++)
-				monomeLedBuffer[led] = led < (phase << 1) ? 12 : 0;
+				monomeLedBuffer[led] = led < phase ? 12 : 0;
 		}
 		if (valueToShow == 2 || valueToShow == 6) // divisor 0-15
 		{
@@ -307,15 +312,20 @@ void updateArc(bool updateTriggers, bool resetTriggers)
 
 //---
 
-void clock(u8 phase) {
-	if(phase) {
+void clock(u8 _phase) {
+	if(_phase) {
 		gpio_set_gpio_pin(B10);
 		
-		for (u8 enc = 0; enc < 4; enc++)
-		{
-			counter[enc]++;
-			if (counter[enc] >= ((u16)DIVISORS[divisor][enc] << 6)) counter[enc] = 0;
-		}
+		timer_remove(&phaseTimer1);
+		timer_remove(&phaseTimer2);
+		timer_remove(&phaseTimer3);
+		
+		timer_add(&phaseTimer1, phase << 2, &phaseTimer1_callback, NULL);
+		timer_add(&phaseTimer2, phase << 3, &phaseTimer2_callback, NULL);
+		timer_add(&phaseTimer3, phase << 4, &phaseTimer3_callback, NULL);
+		
+		counter[0]++;
+		if (counter[0] >= ((u16)DIVISORS[divisor][0] << 6)) counter[0] = 0;
 		updateArc(true, false);
 	}
 	else {
@@ -406,6 +416,27 @@ static void triggerTimer_callback(void* o) {
 	gpio_clr_gpio_pin(B01);
 	gpio_clr_gpio_pin(B02);
 	gpio_clr_gpio_pin(B03);
+}
+
+static void phaseTimer1_callback(void* o) {  
+	timer_remove(&phaseTimer1);
+	counter[1]++;
+	if (counter[1] >= ((u16)DIVISORS[divisor][1] << 6)) counter[1] = 0;
+	updateArc(true, false);
+}
+
+static void phaseTimer2_callback(void* o) {  
+	timer_remove(&phaseTimer2);
+	counter[2]++;
+	if (counter[2] >= ((u16)DIVISORS[divisor][2] << 6)) counter[2] = 0;
+	updateArc(true, false);
+}
+
+static void phaseTimer3_callback(void* o) {  
+	timer_remove(&phaseTimer3);
+	counter[3]++;
+	if (counter[3] >= ((u16)DIVISORS[divisor][3] << 6)) counter[3] = 0;
+	updateArc(true, false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -513,7 +544,7 @@ static void handler_MonomeRingEnc(s32 data) {
 			case 0:
 				if (delta < 0)
 				{
-					if (++phase > 32) phase = 0; 
+					if (++phase > 64) phase = 0; 
 					showValue(1, false, true);
 				} 
 				else 
@@ -544,7 +575,7 @@ static void handler_MonomeRingEnc(s32 data) {
 			case 0:
 				if (delta > 0)
 				{
-					if (phase < 32) phase++; 
+					if (phase < 64) phase++; 
 				} 
 				else 
 				{ 

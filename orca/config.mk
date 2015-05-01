@@ -40,7 +40,7 @@
 THIS = orca
 
 # Path to top level ASF directory relative to this project directory.
-PRJ_PATH = ../../mod/xdk-asf-3.17.0
+PRJ_PATH = ../xdk-asf-3.17.0
 
 # Target CPU architecture: ap, ucr1, ucr2 or ucr3
 ARCH = ucr1

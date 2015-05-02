@@ -1,0 +1,4 @@
+1. modify config.mk - replace arc_ww_init with the name of your firmware in this line: THIS = arc_ww_init
+2. if you're using flash.command / flash.sh update the name of the hex file
+3. depending on where you place the template you might need to modify Makefile and config.mk 
+to point to correct locations of the monome skeleton and the atmel xdk-asf-3.17.0 frameworks

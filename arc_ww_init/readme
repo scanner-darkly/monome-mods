@@ -1,4 +1,15 @@
-1. modify config.mk - replace arc_ww_init with the name of your firmware in this line: THIS = arc_ww_init
-2. if you're using flash.command / flash.sh update the name of the hex file
+0. you will need to have the toolchain set up first. see http://monome.org/docs/modular:toolchain
+  
+1. modify config.mk - replace arc_ww_init with the name of your firmware in this line: THIS = arc_ww_init  
+  
+2. if you're using flash.command / flash.sh update the name of the hex file  
+  
 3. depending on where you place the template you might need to modify Makefile and config.mk 
 to point to correct locations of the monome skeleton and the atmel xdk-asf-3.17.0 frameworks
+
+- if you clone/fork my repo you will also need to clone/fork https://github.com/tehn/mod and put both 
+  in the same folder and then you should be good to go
+
+- you could clone/fork tehn/mod repo and then just copy arc_ww_init folder there if you prefer, 
+  if you do just copy Makefile and config.mk from whitewhale and edit config.mk 
+  (replace "whitewhale" with whatever you call your firmware)

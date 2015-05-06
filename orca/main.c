@@ -30,17 +30,27 @@
 #define FIRSTRUN_KEY 0x22
 #define ENCODER_DELTA_SENSITIVITY 40
 
-const u16 SCALES[24][16] = {
+const u16 SCALES[16][16] = {
 
-0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,													// ZERO
-0, 68, 136, 170, 238, 306, 375, 409, 477, 545, 579, 647, 715, 784, 818,	886,					// ionian [2, 2, 1, 2, 2, 2, 1]
-0, 68, 102, 170, 238, 306, 340, 409, 477, 511, 579, 647, 715, 750, 818,	886,					// dorian [2, 1, 2, 2, 2, 1, 2]
-0, 34, 102, 170, 238, 272, 340, 409, 443, 511, 579, 647, 681, 750, 818,	852,					// phrygian [1, 2, 2, 2, 1, 2, 2]
-0, 68, 136, 204, 238, 306, 375, 409, 477, 545, 613, 647, 715, 784, 818,	886,					// lydian [2, 2, 2, 1, 2, 2, 1]
-0, 68, 136, 170, 238, 306, 340, 409, 477, 545, 579, 647, 715, 750, 818,	886,					// mixolydian [2, 2, 1, 2, 2, 1, 2]
-0, 68, 136, 170, 238, 306, 340, 409, 477, 545, 579, 647, 715, 750, 818,	886,					// aeolian [2, 1, 2, 2, 1, 2, 2]
-0, 34, 102, 170, 204, 272, 340, 409, 443, 511, 579, 613, 681, 750, 818,	852,					// locrian [1, 2, 2, 1, 2, 2, 2]
+0, 68, 136, 170, 238, 306, 375, 409, 477, 545, 579, 647, 715, 784, 818,	886, // ionian [2, 2, 1, 2, 2, 2, 1]
+0, 68, 102, 170, 238, 306, 340, 409, 477, 511, 579, 647, 715, 750, 818,	886, // dorian [2, 1, 2, 2, 2, 1, 2]
+0, 34, 102, 170, 238, 272, 340, 409, 443, 511, 579, 647, 681, 750, 818,	852, // phrygian [1, 2, 2, 2, 1, 2, 2]
+0, 68, 136, 204, 238, 306, 375, 409, 477, 545, 613, 647, 715, 784, 818,	886, // lydian [2, 2, 2, 1, 2, 2, 1]
+0, 68, 136, 170, 238, 306, 340, 409, 477, 545, 579, 647, 715, 750, 818,	886, // mixolydian [2, 2, 1, 2, 2, 1, 2]
+0, 68, 136, 170, 238, 306, 340, 409, 477, 545, 579, 647, 715, 750, 818,	886, // aeolian [2, 1, 2, 2, 1, 2, 2]
+0, 34, 102, 170, 204, 272, 340, 409, 443, 511, 579, 613, 681, 750, 818,	852, // locrian [1, 2, 2, 1, 2, 2, 2]
+0, 68, 102, 204, 238, 306, 340, 409, 477, 511, 613, 647, 715, 750, 818, 886, // Ukrainian Dorian
 
+0, 34, 136, 170, 204, 272, 375, 409, 443, 545, 579, 613, 681, 784, 818, 852, // Persian
+306, 375, 409, 511, 545, 579, 647, 715, 784, 818, 920, 954, 988, 1056, 1125, 1193, // Hungarian
+238, 272, 375, 443, 511, 579, 613, 647, 681, 784, 852, 920, 988, 1022, 1056, 1090, // enigmatic
+0, 34, 136, 170, 238, 272, 340, 409, 443, 545, 579, 647, 681, 750, 818, 852, // Phrygian dominant
+0, 34, 136, 204, 272, 340, 409, 443, 545, 613, 681, 750, 818, 852, 954, 1022, // Tritone 
+0, 68, 136, 204, 238, 306, 340, 409, 477, 545, 613, 647, 715, 750, 818, 886, // Acoustic 
+0, 34, 102, 136, 204, 272, 340, 409, 443, 511, 545, 613, 681, 750, 818, 852,  // Altered 
+0, 136, 204, 238, 375, 409, 545, 613, 647, 784, 818, 954, 1022, 1056, 1193, 1227 // Hirajoshi 
+
+/*
 0, 34, 68, 102, 136, 170, 204, 238, 272, 306, 341, 375, 409, 443, 477, 511,						// chromatic
 0, 68, 136, 204, 272, 341, 409, 477, 545, 613, 682, 750, 818, 886, 954,	1022,					// whole
 0, 170, 340, 511, 681, 852, 1022, 1193, 1363, 1534, 1704, 1875, 2045, 2215, 2386, 2556,			// fourths
@@ -58,6 +68,7 @@ const u16 SCALES[24][16] = {
 0, 136, 272, 409, 545, 682, 818, 955, 1091, 1228, 1364, 1501, 1637, 1774, 1910, 2047,			// log-ish 5v
 0, 745, 1362, 1874, 2298, 2649, 2941, 3182, 3382, 3548, 3685, 3799, 3894, 3972, 4037, 4091,		// exp-ish 10v
 0, 372, 681, 937, 1150, 1325, 1471, 1592, 1692, 1775, 1844, 1901, 1948, 1987, 2020, 2047		// exp-ish 5v
+*/
 
 };
 
@@ -86,25 +97,25 @@ const u8 DIVISORS[16][4] =
 
 const u8 MIXERS[16][2] =
 {
-	0b1111, 0b0001,
 	0b1110, 0b0001,
-	0b1100, 0b0011,
-	0b1000, 0b0111,
+	0b1101, 0b0010,
+	0b1011, 0b0100,
+	0b0111, 0b1000,
 	
 	0b1010, 0b0101,
 	0b0101, 0b1010,
 	0b1001, 0b0110,
 	0b0110, 0b1001,
 	
+	0b1110, 0b0111,
+	0b0111, 0b1110,
+	0b1011, 0b1101,
+	0b1101, 0b1011,
+
 	0b1111, 0b0011,
 	0b1111, 0b0110,
 	0b1111, 0b1100,
-	0b1111, 0b1000,
-	
-	0b0001, 0b1110,
-	0b0011, 0b1100,
-	0b1000, 0b1110,
-	0b0001, 0b1111
+	0b1111, 0b1001
 };
 
 const u8 TRIGGERS[4] = {B00, B01, B02, B03};
@@ -119,8 +130,8 @@ u16 cv0, cv1;
 
 u8 scale, phase, divisor, chance, mixer;
 u16 counter[4] = {0, 0, 0, 0};
-u8 prevValue[4];
 static softTimer_t triggerTimer = { .next = NULL, .prev = NULL };
+u8 triggersBusy = 0;
 
 u16 encoderDelta[4] = {0, 0, 0, 0};
 u8 valueToShow = 0;
@@ -161,100 +172,69 @@ void flash_unfresh(void);
 void flash_write(void);
 void flash_read(void);
 
-void updateArc(bool updateTriggers, bool resetTriggers);
-void showValue(u8 value, bool updateTriggers, bool resetTriggers);
+void redrawArc(void);
+void updateOutputs(void);
+void showValue(u8 value);
 static void triggerTimer_callback(void* o);
 
 ////////////////////////////////////////////////////////////////////////////////
 // application clock code
 
-void updateArc(bool updateTriggers, bool resetTriggers)
+void redrawArc(void)
 {
-	u8 cv = 0, cv_ = 0, realLed, prevLed, prev, next, level;
-	
-	if (updateTriggers) timer_remove(&triggerTimer);
+	u8 prev, next, level, currentLed;
+	u16 current, currentOn;
 	
 	for (u8 enc = 0; enc < 4; enc++)
 	{
 		prev = 0;
+		level = 2;
 		
 		for (u8 led = 0; led < 64; led++)
 		{
-			// adding 192 = 64*3 to cover negative values (phase can go up to 32 and enc is 4 max plus another 64 to cover -led)
-			u16 factor = (counter[enc] + 192 - led - phase*enc) / DIVISORS[divisor][enc]; 
-			realLed = (counter[enc] + 64 - led + 32) & 63;
-			next = factor & 1;
+			current = counter[enc] + (DIVISORS[divisor][enc] << 7) - 32 + led - phase*enc;
+			currentOn = current / DIVISORS[divisor][enc];
+			currentLed = ((counter[enc] + 64 - 32 + led) & 63) + (enc << 6);
+
+			next = currentOn & 1;
 			if (!prev && next)
 			{
 				level = 10 - (abs(led - 32) >> 2);
 			}
 			prev = next;
-			monomeLedBuffer[(enc << 6) + realLed] = next * level;
+			
+			monomeLedBuffer[currentLed] = next * level;
 		}
 
-		realLed = (enc << 6) + (counter[enc] & 63);
-
-		if (resetTriggers)
-		{
-			prevLed = (enc << 6) + ((counter[enc] + 63) & 63);
-			prevValue[enc] = monomeLedBuffer[prevLed];
-		}
-
-		if (chance < (rnd() & 63))
-		{
-			if (monomeLedBuffer[realLed] && (MIXERS[mixer][0] & (1 << enc))) cv += 1 << enc;
-			if (updateTriggers && prevValue[enc] != monomeLedBuffer[realLed]) gpio_set_gpio_pin(TRIGGERS[enc]); else gpio_clr_gpio_pin(TRIGGERS[enc]);
-		}
-		
-		if (monomeLedBuffer[realLed] && (MIXERS[mixer][1] & (1 << enc))) cv_ += 1 << enc;
-		
-		prevValue[enc] = monomeLedBuffer[realLed];
-		monomeLedBuffer[realLed] = 0xF;
+		monomeLedBuffer[(enc << 6) + (counter[enc] & 63)] = 0xF;
 	}
-	timer_add(&triggerTimer, 10, &triggerTimer_callback, NULL);
 
-	cv0 = SCALES[scale + 1][cv];
-	cv1 = SCALES[scale + 1][cv_];
-
-	// write to DAC
-	spi_selectChip(SPI,DAC_SPI);
-	spi_write(SPI,0x31);	// update A
-	spi_write(SPI,cv0>>4);
-	spi_write(SPI,cv0<<4);
-	spi_unselectChip(SPI,DAC_SPI);
-
-	spi_selectChip(SPI,DAC_SPI);
-	spi_write(SPI,0x38);	// update B
-	spi_write(SPI,cv1>>4);
-	spi_write(SPI,cv1<<4);
-	spi_unselectChip(SPI,DAC_SPI);
-	
 	if (monome_encs() == 2) // arc2
 	{
 		if (valueToShow == 1) // phase 0-32
 		{
 			for (u8 led = 0; led < 64; led++)
-				monomeLedBuffer[63 - led] = led < (phase << 1) ? 12 : 0;
+				monomeLedBuffer[63 - led] = led < (phase << 1) ? 7 + (phase >> 2) : 0;
 		}
 		if (valueToShow == 2) // divisor 0-15
 		{
 			for (u8 led = 0; led < 64; led++)
-				monomeLedBuffer[led] = (led < ((divisor + 1) << 2)) && (led >= (divisor << 2)) ? 12 : 0;
+				monomeLedBuffer[led] = !(led & 3) ? 5 : ((led < ((divisor + 1) << 2)) && (led >= (divisor << 2)) ? 15 : 0);
 		}
 		if (valueToShow == 3) // chance 0-32
 		{
 			for (u8 led = 0; led < 64; led++)
-				monomeLedBuffer[127 - led] = led < (chance << 1) ? 12 : 0;
+				monomeLedBuffer[127 - led] = led < (chance << 1) ? 7 + (chance >> 2) : 0;
 		}
 		if (valueToShow == 4) // mixer 0-15
 		{
 			for (u8 led = 0; led < 64; led++)
-				monomeLedBuffer[led + 64] = (led < ((mixer + 1) << 2)) && (led >= (mixer << 2)) ? 12 : 0;
+				monomeLedBuffer[led + 64] = !(led & 3) ? 5 : ((led < ((mixer + 1) << 2)) && (led >= (mixer << 2)) ? 15 : 0);
 		}
-		if (valueToShow == 5)
+		if (valueToShow == 5) // scale 0-15
 		{
 			for (u8 led = 0; led < 64; led++)
-				monomeLedBuffer[led] = (led < ((scale + 1) << 2)) && (led >= (scale << 2)) ? 12 : 0;
+				monomeLedBuffer[led] = !(led & 3) ? 5 : ((led < ((scale + 1) << 2)) && (led >= (scale << 2)) ? 15 : 0);
 		}
 		if (valueToShow == 0)
 		{
@@ -278,34 +258,72 @@ void updateArc(bool updateTriggers, bool resetTriggers)
 		if (valueToShow == 1 || valueToShow == 6) // phase 0-32
 		{
 			for (u8 led = 0; led < 64; led++)
-				monomeLedBuffer[led] = led < (phase << 1) ? 12 : 0;
+				monomeLedBuffer[led] = led < (phase << 1) ? 7 + (phase >> 2) : 0;
 		}
 		if (valueToShow == 2 || valueToShow == 6) // divisor 0-15
 		{
 			for (u8 led = 0; led < 64; led++)
-				monomeLedBuffer[led + 64] = (led < ((divisor + 1) << 2)) && (led >= (divisor << 2)) ? 12 : 0;
+				monomeLedBuffer[led + 64] = !(led & 3) ? 5 : ((led < ((divisor + 1) << 2)) && (led >= (divisor << 2)) ? 15 : 0);
 		}
 		if (valueToShow == 3 || valueToShow == 6) // chance 0-32
 		{
 			for (u8 led = 0; led < 64; led++)
-				monomeLedBuffer[led + 128] = led < (chance << 1) ? 12 : 0;
+				monomeLedBuffer[led + 128] = led < (chance << 1) ? 7 + (chance >> 2) : 0;
 		}
 		if (valueToShow == 4 || valueToShow == 6) // mixer 0-15
 		{
 			for (u8 led = 0; led < 64; led++)
-				monomeLedBuffer[led + 192] = (led < ((mixer + 1) << 2)) && (led >= (mixer << 2)) ? 12 : 0;
+				monomeLedBuffer[led + 192] = !(led & 3) ? 5 : ((led < ((mixer + 1) << 2)) && (led >= (mixer << 2)) ? 15 : 0);
 		}
-		if (valueToShow == 5)
+		if (valueToShow == 5) // scale 0-15
 		{
 			for (u8 led = 0; led < 64; led++)
-				monomeLedBuffer[led] = (led < ((scale + 1) << 2)) && (led >= (scale << 2)) ? 12 : 0;
+				monomeLedBuffer[led] = !(led & 3) ? 5 : ((led < ((scale + 1) << 2)) && (led >= (scale << 2)) ? 15 : 0);
 		}
 	}
 
 	monomeFrameDirty = 0b1111;
 }
 
-//---
+void updateOutputs(void)
+{
+	if (!triggersBusy) timer_remove(&triggerTimer);
+	
+	u8 cv = 0, cv_ = 0;
+	u16 prevOn, currentOn, offset;
+		
+	for (u8 enc = 0; enc < 4; enc++)
+	{
+		offset = counter[enc] + (DIVISORS[divisor][enc] << 7) - phase*enc;
+		currentOn = (offset / DIVISORS[divisor][enc]) & 1;
+		prevOn = ((offset - 1) / DIVISORS[divisor][enc]) & 1;
+		
+		if (chance < (rnd() & 63))
+		{
+			if (currentOn && (MIXERS[mixer][0] & (1 << enc))) cv += 1 << enc;
+			if (currentOn && (MIXERS[mixer][1] & (1 << enc))) cv_ += 1 << enc;
+			!triggersBusy && (prevOn != currentOn) ? gpio_set_gpio_pin(TRIGGERS[enc]) : gpio_clr_gpio_pin(TRIGGERS[enc]);
+		}
+	}
+
+	if (!triggersBusy) timer_add(&triggerTimer, 10, &triggerTimer_callback, NULL);
+
+	cv0 = SCALES[scale][cv];
+	cv1 = SCALES[scale][cv_];
+
+	// write to DAC
+	spi_selectChip(SPI,DAC_SPI);
+	spi_write(SPI,0x31);	// update A
+	spi_write(SPI,cv0>>4);
+	spi_write(SPI,cv0<<4);
+	spi_unselectChip(SPI,DAC_SPI);
+
+	spi_selectChip(SPI,DAC_SPI);
+	spi_write(SPI,0x38);	// update B
+	spi_write(SPI,cv1>>4);
+	spi_write(SPI,cv1<<4);
+	spi_unselectChip(SPI,DAC_SPI);
+}
 
 void clock(u8 phase) {
 	if(phase) {
@@ -316,7 +334,8 @@ void clock(u8 phase) {
 			counter[enc]++;
 			if (counter[enc] >= ((u16)DIVISORS[divisor][enc] << 6)) counter[enc] = 0;
 		}
-		updateArc(true, false);
+		updateOutputs();
+		redrawArc();
 	}
 	else {
 		gpio_clr_gpio_pin(B10);
@@ -387,20 +406,20 @@ void timers_unset_monome(void) {
 static void showValueTimer_callback(void* o) {  
 	valueToShow = 0;
 	timer_remove(&showValueTimer);
-	updateArc(false, false);
+	redrawArc();
 }
 
-void showValue(u8 value, bool updateTriggers, bool resetTriggers)
+void showValue(u8 value)
 {
-	if (valueToShow)
-		timer_remove(&showValueTimer);
+	if (valueToShow) timer_remove(&showValueTimer);
 
 	valueToShow = value;
 	timer_add(&showValueTimer, 1000, &showValueTimer_callback, NULL);
-	updateArc(updateTriggers, resetTriggers);
+	redrawArc();
 }
 
-static void triggerTimer_callback(void* o) {  
+static void triggerTimer_callback(void* o) {
+	triggersBusy = 0;
 	timer_remove(&triggerTimer);
 	gpio_clr_gpio_pin(B00);
 	gpio_clr_gpio_pin(B01);
@@ -436,11 +455,11 @@ static void handler_Front(s32 data) {
 		if (monome_encs() == 2) // arc2
 		{
 			arc2index = !arc2index;
-			updateArc(false, false);
+			redrawArc();
 		}
 		else
 		{
-			showValue(6, false, false);
+			showValue(6);
 		}
 	}
 	else {
@@ -467,7 +486,8 @@ static void handler_PollADC(s32 data) {
 	if (newPotValue != prevPotValue)
 	{
 		prevPotValue = scale = newPotValue;
-		showValue(5, false, false);
+		updateOutputs();
+		showValue(5);
 	}
 }
 
@@ -514,25 +534,25 @@ static void handler_MonomeRingEnc(s32 data) {
 				if (delta < 0)
 				{
 					if (++phase > 32) phase = 0; 
-					showValue(1, false, true);
+					showValue(1);
 				} 
 				else 
 				{ 
 					if (++divisor > 15) divisor = 0;
-					for (u8 enc = 0; enc < 4; enc++) counter[enc] = 0;
-					showValue(2, false, true);
+					for (u8 enc = 0; enc < 4; enc++) counter[enc] = counter[0] & 63;
+					showValue(2);
 				}
 				break;
 			case 1:
 				if (delta < 0)
 				{
 					if (++chance > 32) chance = 0; 
-					showValue(3, false, false);
+					showValue(3);
 				}
 				else
 				{
 					if (++mixer > 15) mixer = 0;
-					showValue(4, false, false);
+					showValue(4);
 				}
 				break;
 		}
@@ -550,7 +570,7 @@ static void handler_MonomeRingEnc(s32 data) {
 				{ 
 					if (phase > 0) phase--; 
 				}
-				showValue(1, false, true);
+				showValue(1);
 				break;
 			case 1:
 				if (delta > 0)
@@ -561,8 +581,8 @@ static void handler_MonomeRingEnc(s32 data) {
 				{
 					if (divisor > 0) divisor--; else divisor = 15;
 				}
-				for (u8 enc = 0; enc < monome_encs(); enc++) counter[enc] = 0;
-				showValue(2, false, true);
+				for (u8 enc = 0; enc < 4; enc++) counter[enc] = counter[0] & 63;
+				showValue(2);
 				break;
 			case 2:
 				if (delta > 0)
@@ -573,7 +593,7 @@ static void handler_MonomeRingEnc(s32 data) {
 				{
 					if (chance > 0) chance--;
 				}
-				showValue(3, false, false);
+				showValue(3);
 				break;
 			case 3:
 				if (delta > 0)
@@ -584,7 +604,7 @@ static void handler_MonomeRingEnc(s32 data) {
 				{
 					if (mixer > 0) mixer--; else mixer = 15;
 				}
-				showValue(4, false, false);
+				showValue(4);
 				break;
 		}
 	}
@@ -629,6 +649,11 @@ void flash_write(void) {
 	flashc_memset8((void*)&(flashy.divisor), divisor, 1, true);
 	flashc_memset8((void*)&(flashy.chance), chance, 1, true);
 	flashc_memset8((void*)&(flashy.mixer), mixer, 1, true);
+	triggersBusy = 1;
+	timer_remove(&triggerTimer);
+	for (u8 enc = 0; enc < 4; enc++)
+		gpio_set_gpio_pin(TRIGGERS[enc]);
+	timer_add(&triggerTimer, 400, &triggerTimer_callback, NULL);
 }
 
 void flash_read(void) {
@@ -677,7 +702,8 @@ int main(void)
 	timer_add(&adcTimer,100,&adcTimer_callback, NULL);
 	clock_temp = 10000; // out of ADC range to force tempo
 
-	updateArc(true, true);
+	updateOutputs();
+	redrawArc();
 	
 	while (true) {
 		check_events();

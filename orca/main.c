@@ -53,7 +53,7 @@ u16 SCALES[16][16] = {
 0, 34, 136, 204, 272, 340, 409, 443, 545, 613, 681, 750, 818, 852, 954, 1022, // Tritone 
 0, 68, 136, 204, 238, 306, 340, 409, 477, 545, 613, 647, 715, 750, 818, 886, // Acoustic 
 0, 34, 102, 136, 204, 272, 340, 409, 443, 511, 545, 613, 681, 750, 818, 852,  // Altered 
-0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 // placeholder for user scale
+0, 34, 68, 102, 136, 170, 204, 238, 272, 306, 341, 375, 409, 443, 477, 511	// chromatic
 
 /*
 0, 34, 68, 102, 136, 170, 204, 238, 272, 306, 341, 375, 409, 443, 477, 511,						// chromatic
@@ -75,6 +75,12 @@ u16 SCALES[16][16] = {
 0, 372, 681, 937, 1150, 1325, 1471, 1592, 1692, 1775, 1844, 1901, 1948, 1987, 2020, 2047		// exp-ish 5v
 */
 
+};
+
+const u16 CHROMATIC[36] = {
+	0, 34, 68, 102, 136, 170, 204, 238, 272, 306, 340, 375,
+	409, 443, 477, 511, 545, 579, 613, 647, 681, 715, 750, 784,
+	818, 852, 886, 920, 954, 988, 1022, 1056, 1090, 1125, 1159, 1193
 };
 
 const u8 DIVISOR_PRESETS[16][4] =
@@ -162,8 +168,9 @@ u16 encoderDelta[4] = {0, 0, 0, 0};
 u8 valueToShow = 0;
 u8 prevPotValue = 16;
 
-u8 isScaleEditing = 0;
+u8 isScaleEditing = 0, isScalePreview = 0;
 u8 editButton1 = 0, editButton2 = 0;
+u8 currentScaleRow = 0, currentScaleColumn = 0;
 
 u8 arc2index = 0; // 0 - show rings 1&2, 1 - show rings 3&4
 u8 isArc;
@@ -182,7 +189,7 @@ typedef const struct {
 	u8 divisorArc, phaseArc, chanceArc, mixerArc;
 	u8 divisor[4], phase[4], reset[4], chance[4];
 	u8 mixerA, mixerB;
-    u16 userScale[16];
+    u16 scales[16][16];
 } nvram_data_t;
 static nvram_data_t flashy;
 
@@ -215,6 +222,9 @@ void flash_write(void);
 void flash_read(void);
 void initializeValues(void);
 
+u16 indexToNote(u8 index);
+u8 noteToIndex(u16 note);
+
 void redraw(void);
 void redrawArc(void);
 void redrawGrid(void);
@@ -225,6 +235,25 @@ static void triggerTimer_callback(void* o);
 ////////////////////////////////////////////////////////////////////////////////
 // application clock code
 
+u16 indexToNote(u8 index)
+{
+	return CHROMATIC[index];
+}
+
+u8 noteToIndex(u16 note)
+{
+	u8 index = 0;
+	for (u8 i = 0; i < 36; i++)
+	{
+		if (CHROMATIC[i] == note)
+		{
+			index = i;
+			break;
+		}
+	}
+	return index;
+}
+
 void redraw(void)
 {
 	isArc ? redrawArc() : redrawGrid();
@@ -233,37 +262,68 @@ void redraw(void)
 
 void redrawGrid(void)
 {
-	// currently selected grid parameter
-	monomeLedBuffer[0] = gridParam == DIVISOR ? 15 : 6;
-	monomeLedBuffer[16] = gridParam == PHASE ? 15 : 6;
-	monomeLedBuffer[32] = gridParam == RESET ? 15 : 6;
-	monomeLedBuffer[48] = gridParam == CHANCE ? 15 : 6;
-	
-	switch(gridParam)
+	u16 current, currentOn;
+
+	if (isScaleEditing)
 	{
-		case DIVISOR:
-			for (u8 i = 0; i < 4; i++)
-				for (u8 led = 0; led < 16; led++)
-					monomeLedBuffer[64+(i<<4)+led] = led < divisor[i] ? 15 : 0;
-			break;
-		case PHASE:
-			for (u8 i = 0; i < 4; i++)
-				for (u8 led = 0; led < 16; led++)
-					monomeLedBuffer[64+(i<<4)+led] = led < phase[i] ? 15 : 0;
-			break;
-		case RESET:
-			for (u8 i = 0; i < 4; i++)
-				for (u8 led = 0; led < 16; led++)
-					monomeLedBuffer[64+(i<<4)+led] = led < reset[i] ? 15 : 0;
-			break;
-		case CHANCE:
-			for (u8 i = 0; i < 4; i++)
-				for (u8 led = 0; led < 16; led++)
-					monomeLedBuffer[64+(i<<4)+led] = led < chance[i] ? 15 : 0;
-			break;
+		monomeLedBuffer[0] = monomeLedBuffer[16] = 15;
+		monomeLedBuffer[32] = 0; monomeLedBuffer[48] = isScalePreview ? 8 : 0;
+		u8 noteIndex;
+		for (u8 y = 0; y < 4; y++)
+		{
+			for (u8 x = 0; x < 4; x++)
+				monomeLedBuffer[64+(y<<4)+x] = currentScaleColumn == x ? 10 : 5;
+			if (currentScaleRow == y) monomeLedBuffer[64+(y<<4)+currentScaleColumn] = 15;
+			
+			for (u8 col = 0; col < 12; col++)
+			{
+				monomeLedBuffer[68+(y<<4)+col] = 0;
+			}
+			noteIndex = noteToIndex(SCALES[scale][(y<<2)+currentScaleColumn]);
+			monomeLedBuffer[68+(y<<4)+(noteIndex % 12)] = 5 + ((noteIndex / 12) * 5);
+		}
+		
+		u8 cvA = 0;
+		for (u8 seq = 0; seq < 4; seq++)
+		{
+			current = counter[seq] + (divisor[seq] << 6) - phase[seq];
+			currentOn = (current / divisor[seq]) & 1;
+			if (currentOn && (mixerA & (1 << seq))) cvA += 1 << seq;
+		}
+		monomeLedBuffer[64+((cvA&12)<<2)+(cvA&3)] = 15;
+	}
+	else
+	{
+		// currently selected grid parameter
+		monomeLedBuffer[0] = gridParam == DIVISOR ? 15 : 6;
+		monomeLedBuffer[16] = gridParam == PHASE ? 15 : 6;
+		monomeLedBuffer[32] = gridParam == RESET ? 15 : 6;
+		monomeLedBuffer[48] = gridParam == CHANCE ? 15 : 6;
+		switch(gridParam)
+		{
+			case DIVISOR:
+				for (u8 i = 0; i < 4; i++)
+					for (u8 led = 0; led < 16; led++)
+						monomeLedBuffer[64+(i<<4)+led] = led < divisor[i] ? 15 : 0;
+				break;
+			case PHASE:
+				for (u8 i = 0; i < 4; i++)
+					for (u8 led = 0; led < 16; led++)
+						monomeLedBuffer[64+(i<<4)+led] = led < phase[i] ? 15 : 0;
+				break;
+			case RESET:
+				for (u8 i = 0; i < 4; i++)
+					for (u8 led = 0; led < 16; led++)
+						monomeLedBuffer[64+(i<<4)+led] = led < reset[i] ? 15 : 0;
+				break;
+			case CHANCE:
+				for (u8 i = 0; i < 4; i++)
+					for (u8 led = 0; led < 16; led++)
+						monomeLedBuffer[64+(i<<4)+led] = led < chance[i] ? 15 : 0;
+				break;
+		}
 	}
 	
-	u16 current, currentOn;
 	u8 seqOffset;
 	for (u8 seq = 0; seq < 4; seq++)
 	{
@@ -402,29 +462,43 @@ void redrawArc(void)
 void updateOutputs()
 {
 	if (!triggersBusy) timer_remove(&triggerTimer);
-	
-	u8 cvA = 0, cvB = 0;
-	u16 prevOn, currentOn, offset;
-		
-	for (u8 seq = 0; seq < 4; seq++)
+
+	if (isScalePreview)
 	{
-		offset = counter[seq] + (divisor[seq] << 6) - phase[seq];
-		currentOn = (offset / divisor[seq]) & 1;
-		prevOn = ((offset - 1) / divisor[seq]) & 1;
-		
-		if (chance[seq] < (rnd() & 15))
+		if (!triggersBusy) 
 		{
-			if (currentOn && (mixerA & (1 << seq))) cvA += 1 << seq;
-			if (currentOn && (mixerB & (1 << seq))) cvB += 1 << seq;
-			!triggersBusy && (prevOn != currentOn) ? gpio_set_gpio_pin(TRIGGERS[seq]) : gpio_clr_gpio_pin(TRIGGERS[seq]);
+			gpio_set_gpio_pin(TRIGGERS[0]);
+			gpio_set_gpio_pin(TRIGGERS[1]);
+			gpio_set_gpio_pin(TRIGGERS[2]);
+			gpio_set_gpio_pin(TRIGGERS[3]);
 		}
+		cv0 = SCALES[scale][(currentScaleRow<<2)+currentScaleColumn];
+		cv1 = 0;
+	}
+	else
+	{
+		u8 cvA = 0, cvB = 0;
+		u16 prevOn, currentOn, offset;
+			
+		for (u8 seq = 0; seq < 4; seq++)
+		{
+			offset = counter[seq] + (divisor[seq] << 6) - phase[seq];
+			currentOn = (offset / divisor[seq]) & 1;
+			prevOn = ((offset - 1) / divisor[seq]) & 1;
+			
+			if (chance[seq] < ((rnd() % 20)+1))
+			{
+				if (currentOn && (mixerA & (1 << seq))) cvA += 1 << seq;
+				if (currentOn && (mixerB & (1 << seq))) cvB += 1 << seq;
+				if (!triggersBusy) prevOn != currentOn ? gpio_set_gpio_pin(TRIGGERS[seq]) : gpio_clr_gpio_pin(TRIGGERS[seq]);
+			}
+		}
+
+		cv0 = SCALES[scale][cvA];
+		cv1 = SCALES[scale][cvB];
 	}
 
 	if (!triggersBusy) timer_add(&triggerTimer, 10, &triggerTimer_callback, NULL);
-
-	cv0 = SCALES[scale][cvA];
-	cv1 = SCALES[scale][cvB];
-
 	// write to DAC
 	spi_selectChip(SPI,DAC_SPI);
 	spi_write(SPI,0x31);	// update A
@@ -808,20 +882,27 @@ static void handler_MonomeGridKey(s32 data) {
         if (y == 0) editButton1 = 1;
         if (y == 1) editButton2 = 1;
         
+		if (isScaleEditing && (y == 3)) // scale preview
+		{
+			isScalePreview = !isScalePreview;
+			redraw();
+			return;
+		}
+		
         if (editButton1 && editButton2)
         {
             isScaleEditing = 1;
-            scale = 15;
             redraw();
             return;
         }
         
-        isScaleEditing = 0;
-        
+		isScaleEditing = 0;
+		
 		if (y == 0) gridParam = DIVISOR;
 		else if (y == 1) gridParam = PHASE;
 		else if (y == 2) gridParam = RESET;
 		else if (y == 3) gridParam = CHANCE;
+		
 		redraw();
 		return;
 	}
@@ -846,7 +927,32 @@ static void handler_MonomeGridKey(s32 data) {
 		return;
 	}
 	
-	if (y >= 4) // param editing
+	if (y < 4) return;
+	
+	if (isScaleEditing)
+	{
+		currentScaleRow = y - 4;
+		if (x < 4)
+		{
+			currentScaleColumn = x;
+			redraw();
+			return;
+		}
+		
+		u8 noteIndex = noteToIndex(SCALES[scale][(currentScaleRow<<2)+currentScaleColumn]);
+		if (noteIndex % 12 == x - 4)
+		{
+			noteIndex = (noteIndex + 12) % 36;
+		}
+		else
+		{
+			noteIndex = x - 4;
+		}
+		SCALES[scale][(currentScaleRow<<2)+currentScaleColumn] = indexToNote(noteIndex);
+		redraw();
+		return;
+	}
+	else // param editing
 	{
 		switch (gridParam)
 		{
@@ -931,10 +1037,8 @@ void flash_write(void) {
 	flashc_memcpy((void *)&flashy.reset, &reset, sizeof(reset), true);
 	flashc_memcpy((void *)&flashy.chance, &chance, sizeof(chance), true);
     
-    u16 userScale[16];
-    for (u8 i = 0; i < 16; i++)
-        userScale[i] = SCALES[15][i];
-    flashc_memcpy((void *)&flashy.userScale, &userScale, sizeof(userScale), true);
+    for (u8 sc = 0; sc < 16; sc++)
+		flashc_memcpy((void *)&flashy.scales[sc], &SCALES[sc], sizeof(SCALES[sc]), true);
 	
 	triggersBusy = 1;
 	timer_remove(&triggerTimer);
@@ -961,8 +1065,9 @@ void flash_read(void) {
 		reset[i] = flashy.reset[i];
 		chance[i] = flashy.chance[i];
 	}
-    for (u8 i = 0; i < 16; i++)
-        SCALES[15][i] = flashy.userScale[i];
+    for (u8 sc = 0; sc < 16; sc++)
+		for (u8 i = 0; i < 16; i++)
+			SCALES[sc][i] = flashy.scales[sc][i];
 }
 
 void initializeValues(void)
@@ -977,8 +1082,6 @@ void initializeValues(void)
 		reset[i] = 0;
 		chance[i] = 0;
 	}
-    for (u8 i = 0; i < 16; i++)
-        SCALES[15][i] = 0;
 }
 
 

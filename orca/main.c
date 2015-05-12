@@ -463,7 +463,7 @@ void updateOutputs()
 {
 	if (!triggersBusy) timer_remove(&triggerTimer);
 
-	if (isScalePreview)
+	if (isScaleEditing && isScalePreview)
 	{
 		if (!triggersBusy) 
 		{

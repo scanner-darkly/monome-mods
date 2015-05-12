@@ -35,7 +35,7 @@
 #define CHANCE 3
 
 
-const u16 SCALES[16][16] = {
+u16 SCALES[16][16] = {
 
 0, 68, 136, 170, 238, 306, 375, 409, 477, 545, 579, 647, 715, 784, 818,	886, // ionian [2, 2, 1, 2, 2, 2, 1]
 0, 68, 102, 170, 238, 306, 340, 409, 477, 511, 579, 647, 715, 750, 818,	886, // dorian [2, 1, 2, 2, 2, 1, 2]
@@ -53,7 +53,7 @@ const u16 SCALES[16][16] = {
 0, 34, 136, 204, 272, 340, 409, 443, 545, 613, 681, 750, 818, 852, 954, 1022, // Tritone 
 0, 68, 136, 204, 238, 306, 340, 409, 477, 545, 613, 647, 715, 750, 818, 886, // Acoustic 
 0, 34, 102, 136, 204, 272, 340, 409, 443, 511, 545, 613, 681, 750, 818, 852,  // Altered 
-0, 136, 204, 238, 375, 409, 545, 613, 647, 784, 818, 954, 1022, 1056, 1193, 1227 // Hirajoshi 
+0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 // placeholder for user scale
 
 /*
 0, 34, 68, 102, 136, 170, 204, 238, 272, 306, 341, 375, 409, 443, 477, 511,						// chromatic
@@ -162,6 +162,9 @@ u16 encoderDelta[4] = {0, 0, 0, 0};
 u8 valueToShow = 0;
 u8 prevPotValue = 16;
 
+u8 isScaleEditing = 0;
+u8 editButton1 = 0, editButton2 = 0;
+
 u8 arc2index = 0; // 0 - show rings 1&2, 1 - show rings 3&4
 u8 isArc;
 u8 gridParam = 0;
@@ -179,6 +182,7 @@ typedef const struct {
 	u8 divisorArc, phaseArc, chanceArc, mixerArc;
 	u8 divisor[4], phase[4], reset[4], chance[4];
 	u8 mixerA, mixerB;
+    u16 userScale[16];
 } nvram_data_t;
 static nvram_data_t flashy;
 
@@ -792,10 +796,28 @@ static void handler_MonomeGridKey(s32 data) {
 	monome_grid_key_parse_event_data(data, &x, &y, &z);
 	// z == 0 key up, z == 1 key down
 	
-	if (!z) return;
+	if (!z) 
+    {
+        if (x == 0 && y == 0) editButton1 = 0;
+        if (x == 0 && y == 1) editButton2 = 0;
+        return;
+    }
 	
 	if (x == 0 && y < 4) // grid param select
 	{
+        if (y == 0) editButton1 = 1;
+        if (y == 1) editButton2 = 1;
+        
+        if (editButton1 && editButton2)
+        {
+            isScaleEditing = 1;
+            scale = 15;
+            redraw();
+            return;
+        }
+        
+        isScaleEditing = 0;
+        
 		if (y == 0) gridParam = DIVISOR;
 		else if (y == 1) gridParam = PHASE;
 		else if (y == 2) gridParam = RESET;
@@ -908,6 +930,11 @@ void flash_write(void) {
 	flashc_memcpy((void *)&flashy.phase, &phase, sizeof(phase), true);
 	flashc_memcpy((void *)&flashy.reset, &reset, sizeof(reset), true);
 	flashc_memcpy((void *)&flashy.chance, &chance, sizeof(chance), true);
+    
+    u16 userScale[16];
+    for (u8 i = 0; i < 16; i++)
+        userScale[i] = SCALES[15][i];
+    flashc_memcpy((void *)&flashy.userScale, &userScale, sizeof(userScale), true);
 	
 	triggersBusy = 1;
 	timer_remove(&triggerTimer);
@@ -934,6 +961,8 @@ void flash_read(void) {
 		reset[i] = flashy.reset[i];
 		chance[i] = flashy.chance[i];
 	}
+    for (u8 i = 0; i < 16; i++)
+        SCALES[15][i] = flashy.userScale[i];
 }
 
 void initializeValues(void)
@@ -948,6 +977,8 @@ void initializeValues(void)
 		reset[i] = 0;
 		chance[i] = 0;
 	}
+    for (u8 i = 0; i < 16; i++)
+        SCALES[15][i] = 0;
 }
 
 

@@ -27,12 +27,13 @@
 #include "conf_board.h"
 
 	
-#define FIRSTRUN_KEY 0x22
+#define FIRSTRUN_KEY 0x50
 #define ENCODER_DELTA_SENSITIVITY 40
 #define DIVISOR 0
 #define PHASE 1
 #define RESET 2
 #define CHANCE 3
+#define SCALE 4
 
 
 u16 SCALES[16][16] = {
@@ -168,8 +169,7 @@ u16 encoderDelta[4] = {0, 0, 0, 0};
 u8 valueToShow = 0;
 u8 prevPotValue = 16;
 
-u8 isScaleEditing = 0, isScalePreview = 0;
-u8 editButton1 = 0, editButton2 = 0;
+u8 isScalePreview = 0;
 u8 currentScaleRow = 0, currentScaleColumn = 0;
 
 u8 arc2index = 0; // 0 - show rings 1&2, 1 - show rings 3&4
@@ -264,59 +264,76 @@ void redrawGrid(void)
 {
 	u16 current, currentOn;
 
-	if (isScaleEditing)
+	monomeLedBuffer[0] = monomeLedBuffer[16] = monomeLedBuffer[32] = monomeLedBuffer[48] = 
+	monomeLedBuffer[1] = monomeLedBuffer[17] = monomeLedBuffer[33] = monomeLedBuffer[49] = 4;
+	
+	if (gridParam == SCALE)
 	{
-		monomeLedBuffer[0] = monomeLedBuffer[16] = 15;
-		monomeLedBuffer[32] = 0; monomeLedBuffer[48] = isScalePreview ? 8 : 0;
+		monomeLedBuffer[1] = 15;
 		u8 noteIndex;
+		u8 cvA = 0;
+		
 		for (u8 y = 0; y < 4; y++)
 		{
+			// note selection 4x4 on the left
 			for (u8 x = 0; x < 4; x++)
-				monomeLedBuffer[64+(y<<4)+x] = currentScaleColumn == x ? 10 : 5;
-			if (currentScaleRow == y) monomeLedBuffer[64+(y<<4)+currentScaleColumn] = 15;
+				monomeLedBuffer[64+(y<<4)+x] = currentScaleColumn == x ? 8 : 4;
 			
+			// clear note space
 			for (u8 col = 0; col < 12; col++)
 			{
 				monomeLedBuffer[68+(y<<4)+col] = 0;
 			}
+			
+			// display current note for the currently selected column
 			noteIndex = noteToIndex(SCALES[scale][(y<<2)+currentScaleColumn]);
-			monomeLedBuffer[68+(y<<4)+(noteIndex % 12)] = 5 + ((noteIndex / 12) * 5);
+			monomeLedBuffer[68+(y<<4)+(noteIndex % 12)] = 4 + ((noteIndex / 12) << 2);
 		}
 		
-		u8 cvA = 0;
-		for (u8 seq = 0; seq < 4; seq++)
+		// current row, current column
+		monomeLedBuffer[64+(currentScaleRow<<4)+currentScaleColumn] = 12;
+
+		// highlight the current note
+		if (!isScalePreview)
 		{
-			current = counter[seq] + (divisor[seq] << 6) - phase[seq];
-			currentOn = (current / divisor[seq]) & 1;
-			if (currentOn && (mixerA & (1 << seq))) cvA += 1 << seq;
+			for (u8 seq = 0; seq < 4; seq++)
+			{
+				current = counter[seq] + (divisor[seq] << 6) - phase[seq];
+				currentOn = (current / divisor[seq]) & 1;
+				if (currentOn && (mixerA & (1 << seq))) cvA += 1 << seq;
+			}
+			noteIndex = noteToIndex(SCALES[scale][cvA]);
+			if ((cvA&3) == currentScaleColumn)
+			{
+				monomeLedBuffer[68+((cvA&12)<<2)+(noteIndex%12)] = 15;
+			}
+			monomeLedBuffer[64+((cvA&12)<<2)+(cvA&3)] = 15;
 		}
-		monomeLedBuffer[64+((cvA&12)<<2)+(cvA&3)] = 15;
 	}
 	else
 	{
-		// currently selected grid parameter
-		monomeLedBuffer[0] = gridParam == DIVISOR ? 15 : 6;
-		monomeLedBuffer[16] = gridParam == PHASE ? 15 : 6;
-		monomeLedBuffer[32] = gridParam == RESET ? 15 : 6;
-		monomeLedBuffer[48] = gridParam == CHANCE ? 15 : 6;
 		switch(gridParam)
 		{
 			case DIVISOR:
+				monomeLedBuffer[0] = 15;
 				for (u8 i = 0; i < 4; i++)
 					for (u8 led = 0; led < 16; led++)
 						monomeLedBuffer[64+(i<<4)+led] = led < divisor[i] ? 15 : 0;
 				break;
 			case PHASE:
+				monomeLedBuffer[16] = 15;
 				for (u8 i = 0; i < 4; i++)
 					for (u8 led = 0; led < 16; led++)
 						monomeLedBuffer[64+(i<<4)+led] = led < phase[i] ? 15 : 0;
 				break;
 			case RESET:
+				monomeLedBuffer[32] = 15;
 				for (u8 i = 0; i < 4; i++)
 					for (u8 led = 0; led < 16; led++)
 						monomeLedBuffer[64+(i<<4)+led] = led < reset[i] ? 15 : 0;
 				break;
 			case CHANCE:
+				monomeLedBuffer[48] = 15;
 				for (u8 i = 0; i < 4; i++)
 					for (u8 led = 0; led < 16; led++)
 						monomeLedBuffer[64+(i<<4)+led] = led < chance[i] ? 15 : 0;
@@ -328,7 +345,7 @@ void redrawGrid(void)
 	for (u8 seq = 0; seq < 4; seq++)
 	{
 		seqOffset = seq << 4;
-		for (u8 led = 1; led <= 13; led++)
+		for (u8 led = 1; led <= 12; led++)
 		{
 			current = counter[seq] + (divisor[seq] << 4) + led - phase[seq];
 			currentOn = current / divisor[seq];
@@ -463,7 +480,7 @@ void updateOutputs()
 {
 	if (!triggersBusy) timer_remove(&triggerTimer);
 
-	if (isScaleEditing && isScalePreview)
+	if ((gridParam == SCALE) && isScalePreview)
 	{
 		if (!triggersBusy) 
 		{
@@ -472,8 +489,7 @@ void updateOutputs()
 			gpio_set_gpio_pin(TRIGGERS[2]);
 			gpio_set_gpio_pin(TRIGGERS[3]);
 		}
-		cv0 = SCALES[scale][(currentScaleRow<<2)+currentScaleColumn];
-		cv1 = 0;
+		cv0 = cv1 = SCALES[scale][(currentScaleRow<<2)+currentScaleColumn];
 	}
 	else
 	{
@@ -656,7 +672,7 @@ static void handler_Front(s32 data) {
 			}
 			else
 			{
-				if (valueToShow == 6)
+				if (valueToShow == 6) // double click
 				{
 					reset[0] = reset[1] = reset[2] = reset[3] = 0;
 					counter[0] = counter[1] = counter[2] = counter[3] = 0;
@@ -870,34 +886,10 @@ static void handler_MonomeGridKey(s32 data) {
 	monome_grid_key_parse_event_data(data, &x, &y, &z);
 	// z == 0 key up, z == 1 key down
 	
-	if (!z) 
-    {
-        if (x == 0 && y == 0) editButton1 = 0;
-        if (x == 0 && y == 1) editButton2 = 0;
-        return;
-    }
+	if (!z) return;
 	
 	if (x == 0 && y < 4) // grid param select
 	{
-        if (y == 0) editButton1 = 1;
-        if (y == 1) editButton2 = 1;
-        
-		if (isScaleEditing && (y == 3)) // scale preview
-		{
-			isScalePreview = !isScalePreview;
-			redraw();
-			return;
-		}
-		
-        if (editButton1 && editButton2)
-        {
-            isScaleEditing = 1;
-            redraw();
-            return;
-        }
-        
-		isScaleEditing = 0;
-		
 		if (y == 0) gridParam = DIVISOR;
 		else if (y == 1) gridParam = PHASE;
 		else if (y == 2) gridParam = RESET;
@@ -905,6 +897,17 @@ static void handler_MonomeGridKey(s32 data) {
 		
 		redraw();
 		return;
+	}
+	
+	if (x == 1 && y < 4) // 2nd row grid param select
+	{
+		if (y == 0)
+		{
+			if (gridParam == SCALE) isScalePreview = !isScalePreview;
+			gridParam = SCALE;
+			redraw();
+			return;
+		}
 	}
 	
 	if (x == 14 && y < 4) // CV A mixing
@@ -929,7 +932,7 @@ static void handler_MonomeGridKey(s32 data) {
 	
 	if (y < 4) return;
 	
-	if (isScaleEditing)
+	if (gridParam == SCALE)
 	{
 		currentScaleRow = y - 4;
 		if (x < 4)
@@ -949,6 +952,7 @@ static void handler_MonomeGridKey(s32 data) {
 			noteIndex = x - 4;
 		}
 		SCALES[scale][(currentScaleRow<<2)+currentScaleColumn] = indexToNote(noteIndex);
+		if (isScalePreview) updateOutputs();
 		redraw();
 		return;
 	}

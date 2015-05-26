@@ -176,6 +176,7 @@ u8 arc2index = 0; // 0 - show rings 1&2, 1 - show rings 3&4
 u8 isArc;
 u8 gridParam = 0;
 u8 scale;
+u64 globalCounter = 0, globalReset;
 u16 counter[4] = {0, 0, 0, 0};
 
 u8 isDivisorArc, isPhaseArc, isChanceArc, isMixerArc;
@@ -224,6 +225,9 @@ void initializeValues(void);
 
 u16 indexToNote(u8 index);
 u8 noteToIndex(u16 note);
+void updateGlobalReset(void);
+void adjustCounter(u8 index);
+void adjustAllCounters(void);
 
 void redraw(void);
 void redrawArc(void);
@@ -529,18 +533,53 @@ void updateOutputs()
 	spi_unselectChip(SPI,DAC_SPI);
 }
 
+void updateGlobalReset()
+{
+	globalReset = 1;
+	for (u8 i = 0; i < 4; i++)
+		globalReset *= reset[i] ? reset[i] : divisor[i] << 6;
+	globalCounter = globalCounter % globalReset;
+}
+
+void adjustCounter(u8 index)
+{
+	updateGlobalReset();
+	counter[index] = globalCounter % (reset[index] ? reset[index] : divisor[index] << 6);
+}
+
+void adjustAllCounters()
+{
+	updateGlobalReset();
+	counter[0] = globalCounter % (reset[0] ? reset[0] : divisor[0] << 6);
+	counter[1] = globalCounter % (reset[1] ? reset[1] : divisor[1] << 6);
+	counter[2] = globalCounter % (reset[2] ? reset[2] : divisor[2] << 6);
+	counter[3] = globalCounter % (reset[3] ? reset[3] : divisor[3] << 6);
+}
+
 void clock(u8 phase) {
 	if(phase) {
 		gpio_set_gpio_pin(B10);
-		
-		for (u8 seq = 0; seq < 4; seq++)
+
+		if (++globalCounter >= globalReset) 
 		{
-			counter[seq]++;
-			if (reset[seq] && (reset[seq] == counter[seq]))
-				counter[seq] = 0;
-			else if (counter[seq] >= ((u16)divisor[seq] << 6)) 
-				counter[seq] = 0;
+			globalCounter = counter[0] = counter[1] = counter[2] = counter[3];
 		}
+		else
+		{
+			for (u8 seq = 0; seq < 4; seq++)
+			{
+				counter[seq]++;
+				if (reset[seq])
+				{
+					if (reset[seq] >= counter[seq])) counter[seq] = 0;
+				}
+				else
+				{
+					if (counter[seq] >= ((u16)divisor[seq] << 6)) counter[seq] = 0;
+				}
+			}
+		}
+			
 		updateOutputs();
 		redraw();
 	}
@@ -675,14 +714,15 @@ static void handler_Front(s32 data) {
 				if (valueToShow == 6) // double click
 				{
 					reset[0] = reset[1] = reset[2] = reset[3] = 0;
-					counter[0] = counter[1] = counter[2] = counter[3] = 0;
+					globalCounter = counter[0] = counter[1] = counter[2] = counter[3] = 0;
+					updateGlobalReset();
 				}
 				else showValue(6);
 			}
 		}
 		else
 		{
-			counter[0] = counter[1] = counter[2] = counter[3] = 0;
+			globalCounter = counter[0] = counter[1] = counter[2] = counter[3] = 0;
 			redraw();
 		}
 	}
@@ -762,7 +802,7 @@ static void handler_MonomeRingEnc(s32 data) {
 						divisorArc = 0;
 					} else if (++divisorArc > 15) divisorArc = 0;
 					for (u8 seq = 0; seq < 4; seq++) divisor[seq] = DIVISOR_PRESETS[divisorArc][seq];
-					for (u8 seq = 0; seq < 4; seq++) counter[seq] = phase[seq] ? counter[0] % phase[seq] : counter[0] & 63;
+					adjustAllCounters();
 					showValue(1);
 				} 
 				else 
@@ -822,7 +862,7 @@ static void handler_MonomeRingEnc(s32 data) {
 				}
 				
 				for (u8 seq = 0; seq < 4; seq++) divisor[seq] = DIVISOR_PRESETS[divisorArc][seq];
-				for (u8 seq = 0; seq < 4; seq++) counter[seq] = phase[seq] ? counter[0] % phase[seq] : counter[0] & 63;
+				adjustAllCounters();
 				showValue(1);
 				break;
 			case 1:
@@ -962,6 +1002,7 @@ static void handler_MonomeGridKey(s32 data) {
 		{
 			case DIVISOR:
 				divisor[y - 4] = x + 1;
+				adjustCounter(y - 4);
 				break;
 			case PHASE:
 				if (phase[y - 4] == x + 1)
@@ -977,8 +1018,8 @@ static void handler_MonomeGridKey(s32 data) {
 				else
 				{
 					reset[y - 4] = x + 1;
-					counter[y - 4] = counter[y - 4] % reset[y - 4];
 				}
+				adjustCounter(y - 4);
 				break;
 			case CHANCE:
 				if (chance[y - 4] == x + 1)
@@ -1069,6 +1110,7 @@ void flash_read(void) {
 		reset[i] = flashy.reset[i];
 		chance[i] = flashy.chance[i];
 	}
+	updateGlobalReset();
     for (u8 sc = 0; sc < 16; sc++)
 		for (u8 i = 0; i < 16; i++)
 			SCALES[sc][i] = flashy.scales[sc][i];
@@ -1086,6 +1128,7 @@ void initializeValues(void)
 		reset[i] = 0;
 		chance[i] = 0;
 	}
+	updateGlobalReset();
 }
 
 

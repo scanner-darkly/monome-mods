@@ -27,13 +27,17 @@
 #include "conf_board.h"
 
 	
-#define FIRSTRUN_KEY 0x50
+#define FIRSTRUN_KEY 0x51
 #define ENCODER_DELTA_SENSITIVITY 40
+
 #define DIVISOR 0
 #define PHASE 1
 #define RESET 2
 #define CHANCE 3
 #define SCALE 4
+#define SETTINGS 5
+#define MUTATE 6
+#define PRESETS 7
 
 
 u16 SCALES[16][16] = {
@@ -181,7 +185,8 @@ u16 counter[4] = {0, 0, 0, 0};
 
 u8 isDivisorArc, isPhaseArc, isChanceArc, isMixerArc;
 u8 divisorArc, phaseArc, chanceArc, mixerArc;
-u8 divisor[4], phase[4], reset[4], chance[4];
+u8 divisor[4], phase[4], reset[4], chance[4], weight[4];
+u8 gateType[4], gateMuted[4], gateLogic[4], gateNot[4], gateTracks[4];
 u8 mixerA, mixerB;
 
 typedef const struct {
@@ -267,6 +272,7 @@ void redraw(void)
 void redrawGrid(void)
 {
 	u16 current, currentOn;
+	u8 seqOffset;
 
 	monomeLedBuffer[0] = monomeLedBuffer[16] = monomeLedBuffer[32] = monomeLedBuffer[48] = 
 	monomeLedBuffer[1] = monomeLedBuffer[17] = monomeLedBuffer[33] = monomeLedBuffer[49] = 4;
@@ -304,14 +310,36 @@ void redrawGrid(void)
 			{
 				current = counter[seq] + (divisor[seq] << 6) - phase[seq];
 				currentOn = (current / divisor[seq]) & 1;
-				if (currentOn && (mixerA & (1 << seq))) cvA += 1 << seq;
+				if (currentOn && (mixerA & (1 << seq))) cvA += weight[seq];
 			}
+			cvA &= 0xf;
 			noteIndex = noteToIndex(SCALES[scale][cvA]);
 			if ((cvA&3) == currentScaleColumn)
 			{
 				monomeLedBuffer[68+((cvA&12)<<2)+(noteIndex%12)] = 15;
 			}
 			monomeLedBuffer[64+((cvA&12)<<2)+(cvA&3)] = 15;
+		}
+	}
+	else if (gridParam == SETTINGS)
+	{
+		monomeLedBuffer[17] = 15;
+		for (u8 i = 0; i < 4; i++)
+		{
+			seqOffset = (i << 4) + 64;
+			monomeLedBuffer[seqOffset] = gateMuted[i] ? 0 : 15;
+			monomeLedBuffer[seqOffset + 1] = gateType[i] ? 15 : 0;
+			monomeLedBuffer[seqOffset + 2] = gateLogic[i] ? 15 : 0;
+			monomeLedBuffer[seqOffset + 3] = gateNot[i] ? 15 : 0;
+			
+			monomeLedBuffer[seqOffset + 4] = gateTracks[i] & 0b0001 ? 15 : 4;
+			monomeLedBuffer[seqOffset + 5] = gateTracks[i] & 0b0010 ? 15 : 4;
+			monomeLedBuffer[seqOffset + 6] = gateTracks[i] & 0b0100 ? 15 : 4;
+			monomeLedBuffer[seqOffset + 7] = gateTracks[i] & 0b1000 ? 15 : 4;
+			
+			seqOffset += 8;
+			for (u8 led = 0; led < 8; led++)
+				monomeLedBuffer[seqOffset+led] = led < weight[i] ? 15 : 0;
 		}
 	}
 	else
@@ -345,15 +373,36 @@ void redrawGrid(void)
 		}
 	}
 	
-	u8 seqOffset;
+	u16 _counter;
+	u64 _globalCounter, _globalReset;
 	for (u8 seq = 0; seq < 4; seq++)
 	{
+		_globalCounter = globalCounter;
+		_globalReset = globalReset;
+		_counter = counter[seq];
 		seqOffset = seq << 4;
-		for (u8 led = 1; led <= 12; led++)
+		for (u8 led = 0; led < 12; led++)
 		{
-			current = counter[seq] + (divisor[seq] << 4) + led - phase[seq];
+			current = _counter + (divisor[seq] << 4) - phase[seq];
 			currentOn = current / divisor[seq];
-			monomeLedBuffer[14 - led + seqOffset] = (currentOn & 1) * 8;
+			monomeLedBuffer[13 - led + seqOffset] = (currentOn & 1) * 8;
+			
+			if (++_globalCounter >= _globalReset) 
+			{
+				_globalCounter = _counter = 0;
+			}
+			else
+			{
+				_counter++;
+				if (reset[seq])
+				{
+					if (_counter >= reset[seq]) _counter = 0;
+				}
+				else
+				{
+					if (_counter >= ((u16)divisor[seq] << 6)) _counter = 0;
+				}
+			}
 		}
 		
 		current = counter[seq] + (divisor[seq] << 4) - phase[seq];
@@ -499,7 +548,13 @@ void updateOutputs()
 	{
 		u8 cvA = 0, cvB = 0;
 		u16 prevOn, currentOn, offset;
-			
+		u8 fire[4], trackIncluded;
+		fire[0] = gateLogic[0];
+		fire[1] = gateLogic[1];
+		fire[2] = gateLogic[2];
+		fire[3] = gateLogic[3];
+
+		
 		for (u8 seq = 0; seq < 4; seq++)
 		{
 			offset = counter[seq] + (divisor[seq] << 6) - phase[seq];
@@ -508,14 +563,44 @@ void updateOutputs()
 			
 			if (chance[seq] < ((rnd() % 20)+1))
 			{
-				if (currentOn && (mixerA & (1 << seq))) cvA += 1 << seq;
-				if (currentOn && (mixerB & (1 << seq))) cvB += 1 << seq;
-				if (!triggersBusy) prevOn != currentOn ? gpio_set_gpio_pin(TRIGGERS[seq]) : gpio_clr_gpio_pin(TRIGGERS[seq]);
+				if (currentOn && (mixerA & (1 << seq))) cvA += weight[seq];
+				if (currentOn && (mixerB & (1 << seq))) cvB += weight[seq]; 
+				
+				for (u8 trig = 0; trig < 4; trig++)
+				{
+					trackIncluded = gateTracks[trig] & (1 << seq);
+					if (gateLogic[trig]) // AND
+					{
+						if (trackIncluded) fire[trig] &= !gateType[trig] ? prevOn != currentOn : currentOn;
+					}
+					else // OR
+					{
+						if (trackIncluded) fire[trig] |= !gateType[trig] ? prevOn != currentOn : currentOn;
+					}
+				}
 			}
 		}
+		
+		if (gateNot[0]) fire[0] = !fire[0];
+		if (gateNot[1]) fire[1] = !fire[1];
+		if (gateNot[2]) fire[2] = !fire[2];
+		if (gateNot[3]) fire[3] = !fire[3];
 
-		cv0 = SCALES[scale][cvA];
-		cv1 = SCALES[scale][cvB];
+		for (u8 trig = 0; trig < 4; trig++)
+		{
+			if (!triggersBusy) 
+			{
+				if (gateMuted[trig])
+					gpio_clr_gpio_pin(TRIGGERS[trig]);
+				else if (fire[trig])
+					gpio_set_gpio_pin(TRIGGERS[trig]);
+				else
+					gpio_clr_gpio_pin(TRIGGERS[trig]);
+			}	
+		}
+		
+		cv0 = SCALES[scale][cvA & 0xf];
+		cv1 = SCALES[scale][cvB & 0xf];
 	}
 
 	if (!triggersBusy) timer_add(&triggerTimer, 10, &triggerTimer_callback, NULL);
@@ -562,7 +647,7 @@ void clock(u8 phase) {
 
 		if (++globalCounter >= globalReset) 
 		{
-			globalCounter = counter[0] = counter[1] = counter[2] = counter[3];
+			globalCounter = counter[0] = counter[1] = counter[2] = counter[3] = 0;
 		}
 		else
 		{
@@ -571,7 +656,7 @@ void clock(u8 phase) {
 				counter[seq]++;
 				if (reset[seq])
 				{
-					if (reset[seq] >= counter[seq])) counter[seq] = 0;
+					if (counter[seq] >= reset[seq]) counter[seq] = 0;
 				}
 				else
 				{
@@ -666,10 +751,10 @@ void showValue(u8 value)
 static void triggerTimer_callback(void* o) {
 	triggersBusy = 0;
 	timer_remove(&triggerTimer);
-	gpio_clr_gpio_pin(B00);
-	gpio_clr_gpio_pin(B01);
-	gpio_clr_gpio_pin(B02);
-	gpio_clr_gpio_pin(B03);
+	for (u8 trig = 0; trig < 4; trig++)
+	{
+		if (!gateType[trig]) gpio_clr_gpio_pin(TRIGGERS[trig]);
+	}
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -948,6 +1033,12 @@ static void handler_MonomeGridKey(s32 data) {
 			redraw();
 			return;
 		}
+		else if (y == 1)
+		{
+			gridParam = SETTINGS;
+			redraw();
+			return;
+		}
 	}
 	
 	if (x == 14 && y < 4) // CV A mixing
@@ -993,6 +1084,39 @@ static void handler_MonomeGridKey(s32 data) {
 		}
 		SCALES[scale][(currentScaleRow<<2)+currentScaleColumn] = indexToNote(noteIndex);
 		if (isScalePreview) updateOutputs();
+		redraw();
+		return;
+	}
+	else if (gridParam == SETTINGS)
+	{
+		if (x == 0)
+		{
+			gateMuted[y - 4] = ~gateMuted[y - 4];
+		}
+		else if (x == 1)
+		{
+			gateType[y - 4] = ~gateType[y - 4];
+		}
+		else if (x == 2)
+		{
+			gateLogic[y - 4] = ~gateLogic[y - 4];
+		}
+		else if (x == 3)
+		{
+			gateNot[y - 4] = ~gateNot[y - 4];
+		}
+		else if (x < 8)
+		{
+			u8 track = 1 << (x - 4);
+			if (gateTracks[y - 4] & track)
+				gateTracks[y - 4] &= ~track;
+			else
+				gateTracks[y - 4] |= track;
+		}
+		else
+		{
+			weight[y - 4] = x - 7;
+		}
 		redraw();
 		return;
 	}
@@ -1128,6 +1252,20 @@ void initializeValues(void)
 		reset[i] = 0;
 		chance[i] = 0;
 	}
+	weight[0] = 1;
+	weight[1] = 2;
+	weight[2] = 4;
+	weight[3] = 8;
+
+	for (u8 i = 0; i < 4; i++)
+	{
+		gateType[i] = 0; // trigger
+		gateMuted[i] = 0;
+		gateLogic[i] = 0; // OR
+		gateNot[i] = 0;
+		gateTracks[i] = 1 << i;
+	}
+	
 	updateGlobalReset();
 }
 

@@ -27,7 +27,7 @@
 #include "conf_board.h"
 
 	
-#define FIRSTRUN_KEY 0x51
+#define FIRSTRUN_KEY 0x50
 #define ENCODER_DELTA_SENSITIVITY 40
 
 #define DIVISOR 0
@@ -163,7 +163,8 @@ u8 clock_phase;
 u16 clock_time, clock_temp;
 
 static softTimer_t triggerTimer = { .next = NULL, .prev = NULL };
-u8 triggersBusy = 0;
+static softTimer_t triggerSettingsTimer = { .next = NULL, .prev = NULL };
+static softTimer_t flashSavedTimer = { .next = NULL, .prev = NULL };
 
 u16 adc[4];
 u8 front_timer;
@@ -182,6 +183,10 @@ u8 gridParam = 0;
 u8 scale;
 u64 globalCounter = 0, globalReset;
 u16 counter[4] = {0, 0, 0, 0};
+u8 fire[4] = {0, 0, 0, 0};
+u8 flashConfirmation = 0;
+u8 showTriggers = 0;
+u8 scalePressed = 0;
 
 u8 isDivisorArc, isPhaseArc, isChanceArc, isMixerArc;
 u8 divisorArc, phaseArc, chanceArc, mixerArc;
@@ -240,6 +245,8 @@ void redrawGrid(void);
 void updateOutputs(void);
 void showValue(u8 value);
 static void triggerTimer_callback(void* o);
+static void triggerSettingsTimer_callback(void* o);
+static void flashSavedTimer_callback(void* o);
 
 ////////////////////////////////////////////////////////////////////////////////
 // application clock code
@@ -324,23 +331,36 @@ void redrawGrid(void)
 	else if (gridParam == SETTINGS)
 	{
 		monomeLedBuffer[17] = 15;
+		
+		u8 addFire, add[4];
+		for (u8 i = 0; i < 4; i++)
+		{
+			current = counter[i] + (divisor[i] << 4) - phase[i];
+			currentOn = current / divisor[i];
+			add[i] = (currentOn & 1) ? 3 : 0;
+		}
+		
+		// triggers/gates
 		for (u8 i = 0; i < 4; i++)
 		{
 			seqOffset = (i << 4) + 64;
-			monomeLedBuffer[seqOffset] = gateMuted[i] ? 0 : 15;
-			monomeLedBuffer[seqOffset + 1] = gateType[i] ? 15 : 0;
-			monomeLedBuffer[seqOffset + 2] = gateLogic[i] ? 15 : 0;
-			monomeLedBuffer[seqOffset + 3] = gateNot[i] ? 15 : 0;
+			addFire = fire[i] && (gateType[i] || showTriggers) ? 3 : 0;
 			
-			monomeLedBuffer[seqOffset + 4] = gateTracks[i] & 0b0001 ? 15 : 4;
-			monomeLedBuffer[seqOffset + 5] = gateTracks[i] & 0b0010 ? 15 : 4;
-			monomeLedBuffer[seqOffset + 6] = gateTracks[i] & 0b0100 ? 15 : 4;
-			monomeLedBuffer[seqOffset + 7] = gateTracks[i] & 0b1000 ? 15 : 4;
+			monomeLedBuffer[seqOffset] = (gateMuted[i] ? 0 : 12) + addFire;
+			monomeLedBuffer[seqOffset + 1] = (gateType[i] ? 12 : 0) + addFire;
+			monomeLedBuffer[seqOffset + 2] = gateLogic[i] ? 12 : 0;
+			monomeLedBuffer[seqOffset + 3] = gateNot[i] ? 12 : 0;
 			
-			seqOffset += 8;
-			for (u8 led = 0; led < 8; led++)
-				monomeLedBuffer[seqOffset+led] = led < weight[i] ? 15 : 0;
+			monomeLedBuffer[seqOffset + 4] = (gateTracks[i] & 0b0001 ? 12 : 0) + add[0];
+			monomeLedBuffer[seqOffset + 5] = (gateTracks[i] & 0b0010 ? 12 : 0) + add[1];
+			monomeLedBuffer[seqOffset + 6] = (gateTracks[i] & 0b0100 ? 12 : 0) + add[2];
+			monomeLedBuffer[seqOffset + 7] = (gateTracks[i] & 0b1000 ? 12 : 0) + add[3];
 		}
+		
+		// track weights
+		for (u8 i = 0; i < 4; i++)
+			for (u8 led = 0; led < 8; led++)
+				monomeLedBuffer[(i << 4) + 72 + led] = (led < weight[i] ? 12 : 0) + add[i];
 	}
 	else
 	{
@@ -385,7 +405,7 @@ void redrawGrid(void)
 		{
 			current = _counter + (divisor[seq] << 4) - phase[seq];
 			currentOn = current / divisor[seq];
-			monomeLedBuffer[13 - led + seqOffset] = (currentOn & 1) * 8;
+			monomeLedBuffer[13 - led + seqOffset] = (currentOn & 1) << 3;
 			
 			if (++_globalCounter >= _globalReset) 
 			{
@@ -415,6 +435,17 @@ void redrawGrid(void)
 	{
 		for (u8 led = 0; led < 16; led++)
 			monomeLedBuffer[led+112] = led == scale ? 15 : 6;
+	}
+	
+	if (flashConfirmation == 1)
+	{
+		for (u8 i = 0; i < 8; i++)
+		{
+			monomeLedBuffer[i << 4] = 15;
+			monomeLedBuffer[(i << 4) + 1] = 15;
+			monomeLedBuffer[(i << 4) + 14] = 15;
+			monomeLedBuffer[(i << 4) + 15] = 15;
+		}
 	}
 }
 
@@ -527,33 +558,37 @@ void redrawArc(void)
 				monomeLedBuffer[led] = !(led & 3) ? 5 : ((led < ((scale + 1) << 2)) && (led >= (scale << 2)) ? 15 : 0);
 		}
 	}
+	
+	if (flashConfirmation == 1)
+	{
+		for (u8 led = 0; led < 255; led++)
+		{
+			monomeLedBuffer[led] = 15;
+		}
+	}
 }
 
 void updateOutputs()
 {
-	if (!triggersBusy) timer_remove(&triggerTimer);
+	timer_remove(&triggerTimer);
 
 	if ((gridParam == SCALE) && isScalePreview)
 	{
-		if (!triggersBusy) 
-		{
-			gpio_set_gpio_pin(TRIGGERS[0]);
-			gpio_set_gpio_pin(TRIGGERS[1]);
-			gpio_set_gpio_pin(TRIGGERS[2]);
-			gpio_set_gpio_pin(TRIGGERS[3]);
-		}
+		gpio_set_gpio_pin(TRIGGERS[0]);
+		gpio_set_gpio_pin(TRIGGERS[1]);
+		gpio_set_gpio_pin(TRIGGERS[2]);
+		gpio_set_gpio_pin(TRIGGERS[3]);
 		cv0 = cv1 = SCALES[scale][(currentScaleRow<<2)+currentScaleColumn];
 	}
 	else
 	{
 		u8 cvA = 0, cvB = 0;
 		u16 prevOn, currentOn, offset;
-		u8 fire[4], trackIncluded;
+		u8 trackIncluded;
 		fire[0] = gateLogic[0];
 		fire[1] = gateLogic[1];
 		fire[2] = gateLogic[2];
 		fire[3] = gateLogic[3];
-
 		
 		for (u8 seq = 0; seq < 4; seq++)
 		{
@@ -571,16 +606,19 @@ void updateOutputs()
 					trackIncluded = gateTracks[trig] & (1 << seq);
 					if (gateLogic[trig]) // AND
 					{
-						if (trackIncluded) fire[trig] &= !gateType[trig] ? prevOn != currentOn : currentOn;
+						if (trackIncluded) fire[trig] &= gateType[trig] ? currentOn : prevOn != currentOn;
 					}
 					else // OR
 					{
-						if (trackIncluded) fire[trig] |= !gateType[trig] ? prevOn != currentOn : currentOn;
+						if (trackIncluded) fire[trig] |= gateType[trig] ? currentOn : prevOn != currentOn;
 					}
 				}
 			}
 		}
-		
+
+		for (u8 trig = 0; trig < 4; trig++)
+			if (gateLogic[trig]) fire[trig] = fire[trig] && gateTracks[trig];
+
 		if (gateNot[0]) fire[0] = !fire[0];
 		if (gateNot[1]) fire[1] = !fire[1];
 		if (gateNot[2]) fire[2] = !fire[2];
@@ -588,22 +626,25 @@ void updateOutputs()
 
 		for (u8 trig = 0; trig < 4; trig++)
 		{
-			if (!triggersBusy) 
-			{
-				if (gateMuted[trig])
-					gpio_clr_gpio_pin(TRIGGERS[trig]);
-				else if (fire[trig])
-					gpio_set_gpio_pin(TRIGGERS[trig]);
-				else
-					gpio_clr_gpio_pin(TRIGGERS[trig]);
-			}	
+			if (gateMuted[trig])
+				gpio_clr_gpio_pin(TRIGGERS[trig]);
+			else if (fire[trig])
+				gpio_set_gpio_pin(TRIGGERS[trig]);
+			else
+				gpio_clr_gpio_pin(TRIGGERS[trig]);
 		}
 		
 		cv0 = SCALES[scale][cvA & 0xf];
 		cv1 = SCALES[scale][cvB & 0xf];
 	}
 
-	if (!triggersBusy) timer_add(&triggerTimer, 10, &triggerTimer_callback, NULL);
+	timer_add(&triggerTimer, 10, &triggerTimer_callback, NULL);
+	if (gridParam == SETTINGS)
+	{
+		showTriggers = 1;
+		timer_add(&triggerSettingsTimer, 100, &triggerSettingsTimer_callback, NULL);
+	}	
+	
 	// write to DAC
 	spi_selectChip(SPI,DAC_SPI);
 	spi_write(SPI,0x31);	// update A
@@ -749,12 +790,23 @@ void showValue(u8 value)
 }
 
 static void triggerTimer_callback(void* o) {
-	triggersBusy = 0;
 	timer_remove(&triggerTimer);
 	for (u8 trig = 0; trig < 4; trig++)
 	{
 		if (!gateType[trig]) gpio_clr_gpio_pin(TRIGGERS[trig]);
 	}
+}
+
+static void triggerSettingsTimer_callback(void* o) {
+	timer_remove(&triggerSettingsTimer);
+	showTriggers = 0;
+	redraw();
+}
+
+static void flashSavedTimer_callback(void* o) {
+	flashConfirmation = 0;
+	timer_remove(&flashSavedTimer);
+	redraw();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1011,7 +1063,15 @@ static void handler_MonomeGridKey(s32 data) {
 	monome_grid_key_parse_event_data(data, &x, &y, &z);
 	// z == 0 key up, z == 1 key down
 	
-	if (!z) return;
+	if (!z) 
+	{
+		if (x == 1 && y == 0)
+		{
+			scalePressed = 0;
+		}
+	
+		return;
+	}
 	
 	if (x == 0 && y < 4) // grid param select
 	{
@@ -1030,6 +1090,7 @@ static void handler_MonomeGridKey(s32 data) {
 		{
 			if (gridParam == SCALE) isScalePreview = !isScalePreview;
 			gridParam = SCALE;
+			scalePressed = 1;
 			redraw();
 			return;
 		}
@@ -1209,14 +1270,13 @@ void flash_write(void) {
     for (u8 sc = 0; sc < 16; sc++)
 		flashc_memcpy((void *)&flashy.scales[sc], &SCALES[sc], sizeof(SCALES[sc]), true);
 	
-	triggersBusy = 1;
-	timer_remove(&triggerTimer);
-	for (u8 enc = 0; enc < 4; enc++)
-		gpio_set_gpio_pin(TRIGGERS[enc]);
-	timer_add(&triggerTimer, 400, &triggerTimer_callback, NULL);
+	timer_add(&flashSavedTimer, 140, &flashSavedTimer_callback, NULL);
+	flashConfirmation = 1;
+	redraw();
 }
 
 void flash_read(void) {
+	initializeValues();
 	isDivisorArc = flashy.isDivisorArc;
 	isPhaseArc = flashy.isPhaseArc;
 	isChanceArc = flashy.isChanceArc;

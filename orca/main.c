@@ -585,10 +585,10 @@ void updateOutputs()
 		u8 cvA = 0, cvB = 0;
 		u16 prevOn, currentOn, offset;
 		u8 trackIncluded;
-		fire[0] = gateLogic[0];
-		fire[1] = gateLogic[1];
-		fire[2] = gateLogic[2];
-		fire[3] = gateLogic[3];
+		fire[0] = gateLogic[0] && gateTracks[0];
+		fire[1] = gateLogic[1] && gateTracks[1];
+		fire[2] = gateLogic[2] && gateTracks[2];
+		fire[3] = gateLogic[3] && gateTracks[3];
 		
 		for (u8 seq = 0; seq < 4; seq++)
 		{
@@ -615,9 +615,6 @@ void updateOutputs()
 				}
 			}
 		}
-
-		for (u8 trig = 0; trig < 4; trig++)
-			if (gateLogic[trig]) fire[trig] = fire[trig] && gateTracks[trig];
 
 		if (gateNot[0]) fire[0] = !fire[0];
 		if (gateNot[1]) fire[1] = !fire[1];

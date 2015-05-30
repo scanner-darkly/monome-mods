@@ -344,10 +344,10 @@ void redrawGrid(void)
 		for (u8 i = 0; i < 4; i++)
 		{
 			seqOffset = (i << 4) + 64;
-			addFire = fire[i] && (gateType[i] || showTriggers) ? 3 : 0;
+			addFire = fire[i] && (gateType[i] == 2 || showTriggers) ? 3 : 0;
 			
 			monomeLedBuffer[seqOffset] = (gateMuted[i] ? 0 : 12) + addFire;
-			monomeLedBuffer[seqOffset + 1] = (gateType[i] ? 12 : 0) + addFire;
+			monomeLedBuffer[seqOffset + 1] = gateType[i] * 6 + addFire;
 			monomeLedBuffer[seqOffset + 2] = gateLogic[i] ? 12 : 0;
 			monomeLedBuffer[seqOffset + 3] = gateNot[i] ? 12 : 0;
 			
@@ -583,7 +583,7 @@ void updateOutputs()
 	else
 	{
 		u8 cvA = 0, cvB = 0;
-		u16 prevOn, currentOn, offset;
+		u16 prevOn, currentOn, trigOn, offset;
 		u8 trackIncluded;
 		fire[0] = gateLogic[0] && gateTracks[0];
 		fire[1] = gateLogic[1] && gateTracks[1];
@@ -601,16 +601,19 @@ void updateOutputs()
 				if (currentOn && (mixerA & (1 << seq))) cvA += weight[seq];
 				if (currentOn && (mixerB & (1 << seq))) cvB += weight[seq]; 
 				
+				
 				for (u8 trig = 0; trig < 4; trig++)
 				{
 					trackIncluded = gateTracks[trig] & (1 << seq);
+					trigOn = !gateType[trig] ? prevOn != currentOn : !prevOn && currentOn;
+					
 					if (gateLogic[trig]) // AND
 					{
-						if (trackIncluded) fire[trig] &= gateType[trig] ? currentOn : prevOn != currentOn;
+						if (trackIncluded) fire[trig] &= gateType[trig] == 2 ? currentOn : trigOn;
 					}
 					else // OR
 					{
-						if (trackIncluded) fire[trig] |= gateType[trig] ? currentOn : prevOn != currentOn;
+						if (trackIncluded) fire[trig] |= gateType[trig] == 2 ? currentOn : trigOn;
 					}
 				}
 			}
@@ -790,7 +793,7 @@ static void triggerTimer_callback(void* o) {
 	timer_remove(&triggerTimer);
 	for (u8 trig = 0; trig < 4; trig++)
 	{
-		if (!gateType[trig]) gpio_clr_gpio_pin(TRIGGERS[trig]);
+		if (gateType[trig] != 2) gpio_clr_gpio_pin(TRIGGERS[trig]);
 	}
 }
 
@@ -1153,7 +1156,7 @@ static void handler_MonomeGridKey(s32 data) {
 		}
 		else if (x == 1)
 		{
-			gateType[y - 4] = ~gateType[y - 4];
+			if (++gateType[y - 4] > 2) gateType[y - 4] = 0;
 		}
 		else if (x == 2)
 		{
@@ -1316,7 +1319,7 @@ void initializeValues(void)
 
 	for (u8 i = 0; i < 4; i++)
 	{
-		gateType[i] = 0; // trigger
+		gateType[i] = 0; // trigger both edges
 		gateMuted[i] = 0;
 		gateLogic[i] = 0; // OR
 		gateNot[i] = 0;

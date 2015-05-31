@@ -40,7 +40,7 @@
 #define PRESETS 7
 
 
-u16 SCALES[16][16] = {
+u16 SCALE_PRESETS[16][16] = {
 
 0, 68, 136, 170, 238, 306, 375, 409, 477, 545, 579, 647, 715, 784, 818,	886, // ionian [2, 2, 1, 2, 2, 2, 1]
 0, 68, 102, 170, 238, 306, 340, 409, 477, 511, 579, 647, 715, 750, 818,	886, // dorian [2, 1, 2, 2, 2, 1, 2]
@@ -180,19 +180,22 @@ u8 currentScaleRow = 0, currentScaleColumn = 0;
 u8 arc2index = 0; // 0 - show rings 1&2, 1 - show rings 3&4
 u8 isArc;
 u8 gridParam = 0;
-u8 scale;
-u64 globalCounter = 0, globalReset;
+u64 globalCounter = 0, globalLength;
 u16 counter[4] = {0, 0, 0, 0};
 u8 fire[4] = {0, 0, 0, 0};
 u8 flashConfirmation = 0;
 u8 showTriggers = 0;
 u8 scalePressed = 0;
 
+u8 scale;
+u16 scales[16][16];
 u8 isDivisorArc, isPhaseArc, isChanceArc, isMixerArc;
 u8 divisorArc, phaseArc, chanceArc, mixerArc;
 u8 divisor[4], phase[4], reset[4], chance[4], weight[4];
 u8 gateType[4], gateMuted[4], gateLogic[4], gateNot[4], gateTracks[4];
 u8 mixerA, mixerB;
+u8 globalReset, globalRandom, rotateScale, rotateWeights;
+u8 globalReset16, globalRandom16, rotateScale16, rotateWeights16;
 
 typedef const struct {
 	u8 fresh;
@@ -235,9 +238,12 @@ void initializeValues(void);
 
 u16 indexToNote(u8 index);
 u8 noteToIndex(u16 note);
-void updateGlobalReset(void);
+void updateglobalLength(void);
 void adjustCounter(u8 index);
 void adjustAllCounters(void);
+u8 random8(void);
+void generateRandom(void);
+void mutate(void);
 
 void redraw(void);
 void redrawArc(void);
@@ -303,7 +309,7 @@ void redrawGrid(void)
 			}
 			
 			// display current note for the currently selected column
-			noteIndex = noteToIndex(SCALES[scale][(y<<2)+currentScaleColumn]);
+			noteIndex = noteToIndex(scales[scale][(y<<2)+currentScaleColumn]);
 			monomeLedBuffer[68+(y<<4)+(noteIndex % 12)] = 4 + ((noteIndex / 12) << 2);
 		}
 		
@@ -320,7 +326,7 @@ void redrawGrid(void)
 				if (currentOn && (mixerA & (1 << seq))) cvA += weight[seq];
 			}
 			cvA &= 0xf;
-			noteIndex = noteToIndex(SCALES[scale][cvA]);
+			noteIndex = noteToIndex(scales[scale][cvA]);
 			if ((cvA&3) == currentScaleColumn)
 			{
 				monomeLedBuffer[68+((cvA&12)<<2)+(noteIndex%12)] = 15;
@@ -362,6 +368,39 @@ void redrawGrid(void)
 			for (u8 led = 0; led < 8; led++)
 				monomeLedBuffer[(i << 4) + 72 + led] = (led < weight[i] ? 12 : 0) + add[i];
 	}
+	else if (gridParam == MUTATE)
+	{
+		monomeLedBuffer[33] = 15;
+
+		for (u8 i = 0; i < 4; i++)
+			for (u8 led = 0; led < 16; led++)
+				monomeLedBuffer[64+(i<<4)+led] = 0;
+			
+		if (rotateScale) monomeLedBuffer[63 + rotateScale] = rotateScale16 ? 11 : 7;
+		if (rotateWeights) monomeLedBuffer[79 + rotateWeights] = rotateWeights16 ? 11 : 7;
+		if (globalRandom) monomeLedBuffer[95 + globalRandom] = globalRandom16 ? 11 : 7;
+		if (globalReset) monomeLedBuffer[111 + globalReset] = globalReset16 ? 11 : 7;
+		
+		if (rotateScale16)
+			monomeLedBuffer[64 + ((globalCounter >> 2) & 15)] += (globalCounter & 3) + 1;
+		else
+			monomeLedBuffer[64 + (globalCounter & 15)] += 4;
+		
+		if (rotateWeights16)
+			monomeLedBuffer[80 + ((globalCounter >> 2) & 15)] += (globalCounter & 3) + 1;
+		else
+			monomeLedBuffer[80 + (globalCounter & 15)] += 4;
+		
+		if (globalRandom16)
+			monomeLedBuffer[96 + ((globalCounter >> 2) & 15)] += (globalCounter & 3) + 1;
+		else
+			monomeLedBuffer[96 + (globalCounter & 15)] += 4;
+		
+		if (globalReset16)
+			monomeLedBuffer[112 + ((globalCounter >> 2) & 15)] += (globalCounter & 3) + 1;
+		else
+			monomeLedBuffer[112 + (globalCounter & 15)] += 4;
+	}
 	else
 	{
 		switch(gridParam)
@@ -394,11 +433,11 @@ void redrawGrid(void)
 	}
 	
 	u16 _counter;
-	u64 _globalCounter, _globalReset;
+	u64 _globalCounter, _globalLength;
 	for (u8 seq = 0; seq < 4; seq++)
 	{
 		_globalCounter = globalCounter;
-		_globalReset = globalReset;
+		_globalLength = globalLength;
 		_counter = counter[seq];
 		seqOffset = seq << 4;
 		for (u8 led = 0; led < 12; led++)
@@ -407,7 +446,7 @@ void redrawGrid(void)
 			currentOn = current / divisor[seq];
 			monomeLedBuffer[13 - led + seqOffset] = (currentOn & 1) << 3;
 			
-			if (++_globalCounter >= _globalReset) 
+			if (++_globalCounter >= _globalLength) 
 			{
 				_globalCounter = _counter = 0;
 			}
@@ -578,7 +617,7 @@ void updateOutputs()
 		gpio_set_gpio_pin(TRIGGERS[1]);
 		gpio_set_gpio_pin(TRIGGERS[2]);
 		gpio_set_gpio_pin(TRIGGERS[3]);
-		cv0 = cv1 = SCALES[scale][(currentScaleRow<<2)+currentScaleColumn];
+		cv0 = cv1 = scales[scale][(currentScaleRow<<2)+currentScaleColumn];
 	}
 	else
 	{
@@ -634,8 +673,8 @@ void updateOutputs()
 				gpio_clr_gpio_pin(TRIGGERS[trig]);
 		}
 		
-		cv0 = SCALES[scale][cvA & 0xf];
-		cv1 = SCALES[scale][cvB & 0xf];
+		cv0 = scales[scale][cvA & 0xf];
+		cv1 = scales[scale][cvB & 0xf];
 	}
 
 	timer_add(&triggerTimer, 10, &triggerTimer_callback, NULL);
@@ -659,23 +698,61 @@ void updateOutputs()
 	spi_unselectChip(SPI,DAC_SPI);
 }
 
-void updateGlobalReset()
+u8 random8(void)
 {
-	globalReset = 1;
+	return (u8)((rnd() ^ adc[1]) & 0xff);
+}
+
+
+void generateRandom(void)
+{
 	for (u8 i = 0; i < 4; i++)
-		globalReset *= reset[i] ? reset[i] : divisor[i] << 6;
-	globalCounter = globalCounter % globalReset;
+	{
+		divisor[i] = (random8() & 7) + 1;
+		phase[i] = random8() % 9;
+		reset[i] = random8() > 127 ? 0 : random8() % 9;
+		chance[i] = random8() > 127 ? 0 : random8() % 9;
+	}
+}
+
+void mutate(void)
+{
+	u8 param = random8() & 3;
+	u8 index = random8() & 3;
+	switch (param)
+	{
+		case 0:
+			divisor[index] = (random8() & 7) + 1;
+			break;
+		case 1:
+			phase[index] = random8() % 9;
+			break;
+		case 2:
+			reset[index] = random8() > 127 ? 0 : random8() % 9;
+			break;
+		case 3:
+			break;
+	}
+}
+
+void updateglobalLength()
+{
+	globalLength = 1;
+	for (u8 i = 0; i < 4; i++)
+		globalLength *= reset[i] ? reset[i] : divisor[i] << 6;
+	globalLength <<= 6; // this is for MUTATE
+	globalCounter = globalCounter % globalLength;
 }
 
 void adjustCounter(u8 index)
 {
-	updateGlobalReset();
+	updateglobalLength();
 	counter[index] = globalCounter % (reset[index] ? reset[index] : divisor[index] << 6);
 }
 
 void adjustAllCounters()
 {
-	updateGlobalReset();
+	updateglobalLength();
 	counter[0] = globalCounter % (reset[0] ? reset[0] : divisor[0] << 6);
 	counter[1] = globalCounter % (reset[1] ? reset[1] : divisor[1] << 6);
 	counter[2] = globalCounter % (reset[2] ? reset[2] : divisor[2] << 6);
@@ -683,10 +760,13 @@ void adjustAllCounters()
 }
 
 void clock(u8 phase) {
-	if(phase) {
+	u8 mutateCounter, mutateCounter16;
+	
+	if( phase)
+	{
 		gpio_set_gpio_pin(B10);
 
-		if (++globalCounter >= globalReset) 
+		if (++globalCounter >= globalLength) 
 		{
 			globalCounter = counter[0] = counter[1] = counter[2] = counter[3] = 0;
 		}
@@ -705,7 +785,38 @@ void clock(u8 phase) {
 				}
 			}
 		}
-			
+		
+		mutateCounter = globalCounter & 15;
+		mutateCounter16 = globalCounter & 63;
+
+		if (rotateScale && ((rotateScale16 && (rotateScale << 2) == mutateCounter16) || (!rotateScale16 && rotateScale == mutateCounter)))
+		{
+			u16 lastScale = scales[scale][15];
+			for (u8 i = 0; i < 15; i++)
+				scales[scale][15-i] = scales[scale][14-i];
+			scales[scale][0] = lastScale;
+		}
+		
+		if (rotateWeights && ((rotateWeights16 && (rotateWeights << 2) == mutateCounter16) || (!rotateWeights16 && rotateWeights == mutateCounter)))
+		{
+			u8 temp = weight[3];
+			weight[3] = weight[2];
+			weight[2] = weight[1];
+			weight[1] = weight[0];
+			weight[0] = temp;
+		}
+		
+		if (globalRandom && ((globalRandom16 && (globalRandom << 2) == mutateCounter16) || (!globalRandom16 && globalRandom == mutateCounter)))
+		{
+			mutate();
+			adjustAllCounters();
+		}
+		
+		if (globalReset && ((globalReset16 && (globalReset << 2) == mutateCounter16) || (!globalReset16 && globalReset == mutateCounter)))
+		{
+			globalCounter = counter[0] = counter[1] = counter[2] = counter[3] = 0;
+		}
+		
 		updateOutputs();
 		redraw();
 	}
@@ -852,7 +963,7 @@ static void handler_Front(s32 data) {
 				{
 					reset[0] = reset[1] = reset[2] = reset[3] = 0;
 					globalCounter = counter[0] = counter[1] = counter[2] = counter[3] = 0;
-					updateGlobalReset();
+					updateglobalLength();
 				}
 				else showValue(6);
 			}
@@ -1091,15 +1202,17 @@ static void handler_MonomeGridKey(s32 data) {
 			if (gridParam == SCALE) isScalePreview = !isScalePreview;
 			gridParam = SCALE;
 			scalePressed = 1;
-			redraw();
-			return;
 		}
 		else if (y == 1)
 		{
 			gridParam = SETTINGS;
-			redraw();
-			return;
 		}
+		else if (y == 2)
+		{
+			gridParam = MUTATE;
+		}
+		redraw();
+		return;
 	}
 	
 	if (x == 14 && y < 4) // CV A mixing
@@ -1124,6 +1237,8 @@ static void handler_MonomeGridKey(s32 data) {
 	
 	if (y < 4) return;
 	
+	// param editing, bottom 4 rows
+	
 	if (gridParam == SCALE)
 	{
 		currentScaleRow = y - 4;
@@ -1134,7 +1249,7 @@ static void handler_MonomeGridKey(s32 data) {
 			return;
 		}
 		
-		u8 noteIndex = noteToIndex(SCALES[scale][(currentScaleRow<<2)+currentScaleColumn]);
+		u8 noteIndex = noteToIndex(scales[scale][(currentScaleRow<<2)+currentScaleColumn]);
 		if (noteIndex % 12 == x - 4)
 		{
 			noteIndex = (noteIndex + 12) % 36;
@@ -1143,7 +1258,7 @@ static void handler_MonomeGridKey(s32 data) {
 		{
 			noteIndex = x - 4;
 		}
-		SCALES[scale][(currentScaleRow<<2)+currentScaleColumn] = indexToNote(noteIndex);
+		scales[scale][(currentScaleRow<<2)+currentScaleColumn] = indexToNote(noteIndex);
 		if (isScalePreview) updateOutputs();
 		redraw();
 		return;
@@ -1177,6 +1292,67 @@ static void handler_MonomeGridKey(s32 data) {
 		else
 		{
 			weight[y - 4] = x - 7;
+		}
+		redraw();
+		return;
+	}
+	else if (gridParam == MUTATE)
+	{
+		if (y == 4) // rotate scales
+		{
+			if (x + 1 == rotateScale) 
+			{
+				if (rotateScale16)
+					rotateScale16 = rotateScale = 0;
+				else
+					rotateScale16++;
+			}
+			else
+			{
+				rotateScale = x + 1;
+			}
+		}
+		else if (y == 5) // rotate weights
+		{
+			if (x + 1 == rotateWeights) 
+			{
+				if (rotateWeights16)
+					rotateWeights16 = rotateWeights = 0;
+				else
+					rotateWeights16++;
+			}
+			else
+			{
+				rotateWeights = x + 1;
+			}
+		}
+		else if (y == 6) // global random
+		{
+			if (x + 1 == globalRandom) 
+			{
+				if (globalRandom16)
+					globalRandom16 = globalRandom = 0;
+				else
+					globalRandom16++;
+			}
+			else
+			{
+				globalRandom = x + 1;
+			}
+		}
+		else if (y == 7) //  global reset
+		{
+			if (x + 1 == globalReset) 
+			{
+				if (globalReset16)
+					globalReset16 = globalReset = 0;
+				else
+					globalReset16++;
+			}
+			else
+			{
+				globalReset = x + 1;
+			}
 		}
 		redraw();
 		return;
@@ -1268,7 +1444,7 @@ void flash_write(void) {
 	flashc_memcpy((void *)&flashy.chance, &chance, sizeof(chance), true);
     
     for (u8 sc = 0; sc < 16; sc++)
-		flashc_memcpy((void *)&flashy.scales[sc], &SCALES[sc], sizeof(SCALES[sc]), true);
+		flashc_memcpy((void *)&flashy.scales[sc], &scales[sc], sizeof(scales[sc]), true);
 	
 	timer_add(&flashSavedTimer, 140, &flashSavedTimer_callback, NULL);
 	flashConfirmation = 1;
@@ -1294,10 +1470,10 @@ void flash_read(void) {
 		reset[i] = flashy.reset[i];
 		chance[i] = flashy.chance[i];
 	}
-	updateGlobalReset();
+	updateglobalLength();
     for (u8 sc = 0; sc < 16; sc++)
 		for (u8 i = 0; i < 16; i++)
-			SCALES[sc][i] = flashy.scales[sc][i];
+			scales[sc][i] = flashy.scales[sc][i];
 }
 
 void initializeValues(void)
@@ -1311,11 +1487,8 @@ void initializeValues(void)
 		phase[i] = PHASE_PRESETS[0][i];
 		reset[i] = 0;
 		chance[i] = 0;
+		weight[i] = 1 << i;
 	}
-	weight[0] = 1;
-	weight[1] = 2;
-	weight[2] = 4;
-	weight[3] = 8;
 
 	for (u8 i = 0; i < 4; i++)
 	{
@@ -1326,7 +1499,15 @@ void initializeValues(void)
 		gateTracks[i] = 1 << i;
 	}
 	
-	updateGlobalReset();
+	scale = 0;
+    for (u8 sc = 0; sc < 16; sc++)
+		for (u8 i = 0; i < 16; i++)
+			scales[sc][i] = SCALE_PRESETS[sc][i];
+
+	globalReset = globalRandom = rotateScale = rotateWeights = 0;
+	globalReset16 = globalRandom16 = rotateScale16 = rotateWeights16 = 0;
+	
+	updateglobalLength();
 }
 
 

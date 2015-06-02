@@ -27,17 +27,23 @@
 #include "conf_board.h"
 
 	
-#define FIRSTRUN_KEY 0x50
+#define FIRSTRUN_KEY 0x53
 #define ENCODER_DELTA_SENSITIVITY 40
 
 #define DIVISOR 0
 #define PHASE 1
 #define RESET 2
 #define CHANCE 3
+
 #define SCALE 4
 #define SETTINGS 5
-#define MUTATE 6
+#define RANDOMIZE 6
 #define PRESETS 7
+
+#define ROTATESCALE 8
+#define ROTATEWEIGHTS 9
+#define MUTATESEQ 10
+#define GLOBALRESET 11
 
 
 u16 SCALE_PRESETS[16][16] = {
@@ -194,8 +200,10 @@ u8 divisorArc, phaseArc, chanceArc, mixerArc;
 u8 divisor[4], phase[4], reset[4], chance[4], weight[4];
 u8 gateType[4], gateMuted[4], gateLogic[4], gateNot[4], gateTracks[4];
 u8 mixerA, mixerB;
-u8 globalReset, globalRandom, rotateScale, rotateWeights;
-u8 globalReset16, globalRandom16, rotateScale16, rotateWeights16;
+s8 rotateScale[16], rotateWeights[16]; 
+u8 mutateSeq[64];
+u8 globalReset;
+
 
 typedef const struct {
 	u8 fresh;
@@ -288,9 +296,38 @@ void redrawGrid(void)
 	u8 seqOffset;
 
 	monomeLedBuffer[0] = monomeLedBuffer[16] = monomeLedBuffer[32] = monomeLedBuffer[48] = 
-	monomeLedBuffer[1] = monomeLedBuffer[17] = monomeLedBuffer[33] = monomeLedBuffer[49] = 4;
-	
-	if (gridParam == SCALE)
+	monomeLedBuffer[1] = monomeLedBuffer[17] = monomeLedBuffer[33] = monomeLedBuffer[49] = 
+	monomeLedBuffer[2] = monomeLedBuffer[18] = monomeLedBuffer[34] = monomeLedBuffer[50] = 4;
+
+	if (gridParam == DIVISOR)
+	{
+		monomeLedBuffer[0] = 15;
+		for (u8 i = 0; i < 4; i++)
+			for (u8 led = 0; led < 16; led++)
+				monomeLedBuffer[64+(i<<4)+led] = led < divisor[i] ? 15 : 0;
+	}
+	else if (gridParam == PHASE)
+	{
+		monomeLedBuffer[16] = 15;
+		for (u8 i = 0; i < 4; i++)
+			for (u8 led = 0; led < 16; led++)
+				monomeLedBuffer[64+(i<<4)+led] = led < phase[i] ? 15 : 0;
+	}
+	else if (gridParam == RESET)
+	{
+		monomeLedBuffer[32] = 15;
+		for (u8 i = 0; i < 4; i++)
+			for (u8 led = 0; led < 16; led++)
+				monomeLedBuffer[64+(i<<4)+led] = led < reset[i] ? 15 : 0;
+	}
+	else if (gridParam == CHANCE)
+	{
+		monomeLedBuffer[48] = 15;
+		for (u8 i = 0; i < 4; i++)
+			for (u8 led = 0; led < 16; led++)
+				monomeLedBuffer[64+(i<<4)+led] = led < chance[i] ? 15 : 0;
+	}
+	else if (gridParam == SCALE)
 	{
 		monomeLedBuffer[1] = 15;
 		u8 noteIndex;
@@ -368,70 +405,72 @@ void redrawGrid(void)
 			for (u8 led = 0; led < 8; led++)
 				monomeLedBuffer[(i << 4) + 72 + led] = (led < weight[i] ? 12 : 0) + add[i];
 	}
-	else if (gridParam == MUTATE)
+	else if (gridParam == RANDOMIZE)
 	{
 		monomeLedBuffer[33] = 15;
-
 		for (u8 i = 0; i < 4; i++)
 			for (u8 led = 0; led < 16; led++)
 				monomeLedBuffer[64+(i<<4)+led] = 0;
-			
-		if (rotateScale) monomeLedBuffer[63 + rotateScale] = rotateScale16 ? 11 : 7;
-		if (rotateWeights) monomeLedBuffer[79 + rotateWeights] = rotateWeights16 ? 11 : 7;
-		if (globalRandom) monomeLedBuffer[95 + globalRandom] = globalRandom16 ? 11 : 7;
-		if (globalReset) monomeLedBuffer[111 + globalReset] = globalReset16 ? 11 : 7;
-		
-		if (rotateScale16)
-			monomeLedBuffer[64 + ((globalCounter >> 2) & 15)] += (globalCounter & 3) + 1;
-		else
-			monomeLedBuffer[64 + (globalCounter & 15)] += 4;
-		
-		if (rotateWeights16)
-			monomeLedBuffer[80 + ((globalCounter >> 2) & 15)] += (globalCounter & 3) + 1;
-		else
-			monomeLedBuffer[80 + (globalCounter & 15)] += 4;
-		
-		if (globalRandom16)
-			monomeLedBuffer[96 + ((globalCounter >> 2) & 15)] += (globalCounter & 3) + 1;
-		else
-			monomeLedBuffer[96 + (globalCounter & 15)] += 4;
-		
-		if (globalReset16)
-			monomeLedBuffer[112 + ((globalCounter >> 2) & 15)] += (globalCounter & 3) + 1;
-		else
-			monomeLedBuffer[112 + (globalCounter & 15)] += 4;
 	}
-	else
+	else if (gridParam == PRESETS)
 	{
-		switch(gridParam)
+		monomeLedBuffer[49] = 15;
+		for (u8 i = 0; i < 4; i++)
+			for (u8 led = 0; led < 16; led++)
+				monomeLedBuffer[64+(i<<4)+led] = 0;
+	}
+	else if (gridParam == ROTATESCALE)
+	{
+		monomeLedBuffer[2] = 15;
+		u8 step = globalCounter & 15;
+		u8 add;
+		for (u8 i = 0; i < 16; i++)
 		{
-			case DIVISOR:
-				monomeLedBuffer[0] = 15;
-				for (u8 i = 0; i < 4; i++)
-					for (u8 led = 0; led < 16; led++)
-						monomeLedBuffer[64+(i<<4)+led] = led < divisor[i] ? 15 : 0;
-				break;
-			case PHASE:
-				monomeLedBuffer[16] = 15;
-				for (u8 i = 0; i < 4; i++)
-					for (u8 led = 0; led < 16; led++)
-						monomeLedBuffer[64+(i<<4)+led] = led < phase[i] ? 15 : 0;
-				break;
-			case RESET:
-				monomeLedBuffer[32] = 15;
-				for (u8 i = 0; i < 4; i++)
-					for (u8 led = 0; led < 16; led++)
-						monomeLedBuffer[64+(i<<4)+led] = led < reset[i] ? 15 : 0;
-				break;
-			case CHANCE:
-				monomeLedBuffer[48] = 15;
-				for (u8 i = 0; i < 4; i++)
-					for (u8 led = 0; led < 16; led++)
-						monomeLedBuffer[64+(i<<4)+led] = led < chance[i] ? 15 : 0;
-				break;
+			add = step == i ? 3 : 0;
+			monomeLedBuffer[64 + i] = (rotateScale[i] > 1 ? 12 : 0) + add;
+			monomeLedBuffer[80 + i] = (rotateScale[i] > 0 ? 12 : 0) + add;
+			monomeLedBuffer[96 + i] = (rotateScale[i] < 0 ? 12 : 0) + add;
+			monomeLedBuffer[112 + i] = (rotateScale[i] < -1 ? 12 : 0) + add;
+		}
+	}
+	else if (gridParam == ROTATEWEIGHTS)
+	{
+		monomeLedBuffer[18] = 15;
+		u8 step = globalCounter & 15;
+		u8 add;
+		for (u8 i = 0; i < 16; i++)
+		{
+			add = step == i ? 3 : 0;
+			monomeLedBuffer[64 + i] = (rotateWeights[i] > 1 ? 12 : 0) + add;
+			monomeLedBuffer[80 + i] = (rotateWeights[i] > 0 ? 12 : 0) + add;
+			monomeLedBuffer[96 + i] = (rotateWeights[i] < 0 ? 12 : 0) + add;
+			monomeLedBuffer[112 + i] = (rotateWeights[i] < -1 ? 12 : 0) + add;
+		}
+	}
+	else if (gridParam == MUTATESEQ)
+	{
+		monomeLedBuffer[34] = 15;
+		u8 step = globalCounter & 63;
+		u8 add;
+		for (u8 i = 0; i < 64; i++)
+		{
+			add = step == i ? 3 : 0;
+			monomeLedBuffer[64 + i] = (mutateSeq[i] ? 12 : 0) + add;
+		}
+	}
+	else if (gridParam == GLOBALRESET)
+	{
+		monomeLedBuffer[50] = 15;
+		u8 step = globalCounter & 63;
+		u8 add;
+		for (u8 i = 0; i < 64; i++)
+		{
+			add = step == i ? 3 : 0;
+			monomeLedBuffer[64 + i] = (i < globalReset ? 15 : 0) + add;
 		}
 	}
 	
+	// tracks
 	u16 _counter;
 	u64 _globalCounter, _globalLength;
 	for (u8 seq = 0; seq < 4; seq++)
@@ -440,7 +479,7 @@ void redrawGrid(void)
 		_globalLength = globalLength;
 		_counter = counter[seq];
 		seqOffset = seq << 4;
-		for (u8 led = 0; led < 12; led++)
+		for (u8 led = 0; led < 11; led++)
 		{
 			current = _counter + (divisor[seq] << 4) - phase[seq];
 			currentOn = current / divisor[seq];
@@ -717,7 +756,7 @@ void generateRandom(void)
 
 void mutate(void)
 {
-	u8 param = random8() & 3;
+	u8 param = random8() % 3;
 	u8 index = random8() & 3;
 	switch (param)
 	{
@@ -740,7 +779,7 @@ void updateglobalLength()
 	globalLength = 1;
 	for (u8 i = 0; i < 4; i++)
 		globalLength *= reset[i] ? reset[i] : divisor[i] << 6;
-	globalLength <<= 6; // this is for MUTATE
+	globalLength <<= 6; // this is for rotate and seq options so that we have at least 64 steps
 	globalCounter = globalCounter % globalLength;
 }
 
@@ -760,13 +799,14 @@ void adjustAllCounters()
 }
 
 void clock(u8 phase) {
-	u8 mutateCounter, mutateCounter16;
+	u8 seq16;
 	
 	if( phase)
 	{
 		gpio_set_gpio_pin(B10);
 
-		if (++globalCounter >= globalLength) 
+		globalCounter++;
+		if (globalCounter >= globalLength || (globalReset && globalCounter >= globalReset))
 		{
 			globalCounter = counter[0] = counter[1] = counter[2] = counter[3] = 0;
 		}
@@ -786,18 +826,53 @@ void clock(u8 phase) {
 			}
 		}
 		
-		mutateCounter = globalCounter & 15;
-		mutateCounter16 = globalCounter & 63;
-
-		if (rotateScale && ((rotateScale16 && (rotateScale << 2) == mutateCounter16) || (!rotateScale16 && rotateScale == mutateCounter)))
+		seq16 = globalCounter & 15;
+		
+		if (rotateScale[seq16] < 0)
+		for (s8 j = 0; j < -rotateScale[seq16]; j++)
 		{
 			u16 lastScale = scales[scale][15];
-			for (u8 i = 0; i < 15; i++)
-				scales[scale][15-i] = scales[scale][14-i];
+			scales[scale][15] = scales[scale][14];
+			scales[scale][14] = scales[scale][13];
+			scales[scale][13] = scales[scale][12];
+			scales[scale][12] = scales[scale][11];
+			scales[scale][11] = scales[scale][10];
+			scales[scale][10] = scales[scale][09];
+			scales[scale][09] = scales[scale][08];
+			scales[scale][08] = scales[scale][07];
+			scales[scale][07] = scales[scale][06];
+			scales[scale][06] = scales[scale][05];
+			scales[scale][05] = scales[scale][04];
+			scales[scale][04] = scales[scale][03];
+			scales[scale][03] = scales[scale][02];
+			scales[scale][02] = scales[scale][01];
 			scales[scale][0] = lastScale;
 		}
 		
-		if (rotateWeights && ((rotateWeights16 && (rotateWeights << 2) == mutateCounter16) || (!rotateWeights16 && rotateWeights == mutateCounter)))
+		if (rotateScale[seq16] > 0)
+		for (s8 j = 0; j < rotateScale[seq16]; j++)
+		{
+			u16 firstScale = scales[scale][0];
+			scales[scale][0] = scales[scale][1];
+			scales[scale][1] = scales[scale][2];
+			scales[scale][2] = scales[scale][3];
+			scales[scale][3] = scales[scale][4];
+			scales[scale][4] = scales[scale][5];
+			scales[scale][5] = scales[scale][6];
+			scales[scale][6] = scales[scale][7];
+			scales[scale][7] = scales[scale][8];
+			scales[scale][8] = scales[scale][9];
+			scales[scale][9] = scales[scale][10];
+			scales[scale][10] = scales[scale][11];
+			scales[scale][11] = scales[scale][12];
+			scales[scale][12] = scales[scale][13];
+			scales[scale][13] = scales[scale][14];
+			scales[scale][14] = scales[scale][15];
+			scales[scale][15] = firstScale;
+		}
+
+		if (rotateWeights[seq16] < 0)
+		for (s8 j = 0; j < -rotateWeights[seq16]; j++)
 		{
 			u8 temp = weight[3];
 			weight[3] = weight[2];
@@ -806,15 +881,20 @@ void clock(u8 phase) {
 			weight[0] = temp;
 		}
 		
-		if (globalRandom && ((globalRandom16 && (globalRandom << 2) == mutateCounter16) || (!globalRandom16 && globalRandom == mutateCounter)))
+		if (rotateWeights[seq16] > 0)
+		for (s8 j = 0; j < rotateWeights[seq16]; j++)
+		{
+			u8 temp = weight[0];
+			weight[0] = weight[1];
+			weight[1] = weight[2];
+			weight[2] = weight[3];
+			weight[3] = temp;
+		}
+		
+		if (mutateSeq[globalCounter & 63])
 		{
 			mutate();
 			adjustAllCounters();
-		}
-		
-		if (globalReset && ((globalReset16 && (globalReset << 2) == mutateCounter16) || (!globalReset16 && globalReset == mutateCounter)))
-		{
-			globalCounter = counter[0] = counter[1] = counter[2] = counter[3] = 0;
 		}
 		
 		updateOutputs();
@@ -1184,7 +1264,7 @@ static void handler_MonomeGridKey(s32 data) {
 		return;
 	}
 	
-	if (x == 0 && y < 4) // grid param select
+	if (x == 0 && y < 4) // select divisor / phase / reset / chance 
 	{
 		if (y == 0) gridParam = DIVISOR;
 		else if (y == 1) gridParam = PHASE;
@@ -1195,7 +1275,7 @@ static void handler_MonomeGridKey(s32 data) {
 		return;
 	}
 	
-	if (x == 1 && y < 4) // 2nd row grid param select
+	if (x == 1 && y < 4) // select scale edit / settings / randomize / presets 
 	{
 		if (y == 0)
 		{
@@ -1203,14 +1283,21 @@ static void handler_MonomeGridKey(s32 data) {
 			gridParam = SCALE;
 			scalePressed = 1;
 		}
-		else if (y == 1)
-		{
-			gridParam = SETTINGS;
-		}
-		else if (y == 2)
-		{
-			gridParam = MUTATE;
-		}
+		else if (y == 1) gridParam = SETTINGS;
+		else if (y == 2) gridParam = RANDOMIZE;
+		else if (y == 3) gridParam = PRESETS;
+		
+		redraw();
+		return;
+	}
+	
+	if (x == 2 && y < 4) // select rotate scale / rotate weights / mutate seq / global reset
+	{
+		if (y == 0) gridParam = ROTATESCALE;
+		else if (y == 1) gridParam = ROTATEWEIGHTS;
+		else if (y == 2) gridParam = MUTATESEQ;
+		else if (y == 3) gridParam = GLOBALRESET;
+		
 		redraw();
 		return;
 	}
@@ -1296,64 +1383,31 @@ static void handler_MonomeGridKey(s32 data) {
 		redraw();
 		return;
 	}
-	else if (gridParam == MUTATE)
+	else if (gridParam == ROTATESCALE)
 	{
-		if (y == 4) // rotate scales
-		{
-			if (x + 1 == rotateScale) 
-			{
-				if (rotateScale16)
-					rotateScale16 = rotateScale = 0;
-				else
-					rotateScale16++;
-			}
-			else
-			{
-				rotateScale = x + 1;
-			}
-		}
-		else if (y == 5) // rotate weights
-		{
-			if (x + 1 == rotateWeights) 
-			{
-				if (rotateWeights16)
-					rotateWeights16 = rotateWeights = 0;
-				else
-					rotateWeights16++;
-			}
-			else
-			{
-				rotateWeights = x + 1;
-			}
-		}
-		else if (y == 6) // global random
-		{
-			if (x + 1 == globalRandom) 
-			{
-				if (globalRandom16)
-					globalRandom16 = globalRandom = 0;
-				else
-					globalRandom16++;
-			}
-			else
-			{
-				globalRandom = x + 1;
-			}
-		}
-		else if (y == 7) //  global reset
-		{
-			if (x + 1 == globalReset) 
-			{
-				if (globalReset16)
-					globalReset16 = globalReset = 0;
-				else
-					globalReset16++;
-			}
-			else
-			{
-				globalReset = x + 1;
-			}
-		}
+		s8 value = y < 6 ? 6 - y : 5 - y;
+		rotateScale[x] = rotateScale[x] == value ? 0 : value;
+		redraw();
+		return;
+	}
+	else if (gridParam == ROTATEWEIGHTS)
+	{
+		s8 value = y < 6 ? 6 - y : 5 - y;
+		rotateWeights[x] = rotateWeights[x] == value ? 0 : value;
+		redraw();
+		return;
+	}
+	else if (gridParam == MUTATESEQ)
+	{
+		u8 index = ((y - 4) << 4) + x;
+		mutateSeq[index] = ~mutateSeq[index];
+		redraw();
+		return;
+	}
+	else if (gridParam == GLOBALRESET)
+	{
+		u8 index = ((y - 4) << 4) + x + 1;
+		globalReset = globalReset == index ? 0 : index;
 		redraw();
 		return;
 	}
@@ -1504,8 +1558,15 @@ void initializeValues(void)
 		for (u8 i = 0; i < 16; i++)
 			scales[sc][i] = SCALE_PRESETS[sc][i];
 
-	globalReset = globalRandom = rotateScale = rotateWeights = 0;
-	globalReset16 = globalRandom16 = rotateScale16 = rotateWeights16 = 0;
+	for (u8 i = 0; i < 16; i++)
+	{
+		rotateScale[i] = rotateWeights[i] = 0; 
+	}
+	for (u8 i = 0; i < 64; i++)
+	{
+		mutateSeq[i] = 0;
+	}
+	globalReset = 0;
 	
 	updateglobalLength();
 }

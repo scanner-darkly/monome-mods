@@ -449,7 +449,7 @@ void redrawGrid(void)
 		for (u8 i = 0; i < 64; i++)
 		{
 			add = step == i ? 3 : 0;
-			monomeLedBuffer[64 + i] = (i < globalReset ? 15 : 0) + add;
+			monomeLedBuffer[64 + i] = (i < globalReset ? 12 : 4) + add;
 		}
 	}
 	

@@ -47,7 +47,6 @@
 
 
 u16 SCALE_PRESETS[16][16] = {
-
 0, 68, 136, 170, 238, 306, 375, 409, 477, 545, 579, 647, 715, 784, 818,	886, // ionian [2, 2, 1, 2, 2, 2, 1]
 0, 68, 102, 170, 238, 306, 340, 409, 477, 511, 579, 647, 715, 750, 818,	886, // dorian [2, 1, 2, 2, 2, 1, 2]
 0, 34, 102, 170, 238, 272, 340, 409, 443, 511, 579, 647, 681, 750, 818,	852, // phrygian [1, 2, 2, 2, 1, 2, 2]
@@ -65,27 +64,6 @@ u16 SCALE_PRESETS[16][16] = {
 0, 68, 136, 204, 238, 306, 340, 409, 477, 545, 613, 647, 715, 750, 818, 886, // Acoustic 
 0, 34, 102, 136, 204, 272, 340, 409, 443, 511, 545, 613, 681, 750, 818, 852,  // Altered 
 0, 34, 68, 102, 136, 170, 204, 238, 272, 306, 341, 375, 409, 443, 477, 511	// chromatic
-
-/*
-0, 34, 68, 102, 136, 170, 204, 238, 272, 306, 341, 375, 409, 443, 477, 511,						// chromatic
-0, 68, 136, 204, 272, 341, 409, 477, 545, 613, 682, 750, 818, 886, 954,	1022,					// whole
-0, 170, 340, 511, 681, 852, 1022, 1193, 1363, 1534, 1704, 1875, 2045, 2215, 2386, 2556,			// fourths
-0, 238, 477, 715, 954, 1193, 1431, 1670, 1909, 2147, 2386, 2625, 2863, 3102, 3340, 3579,		// fifths
-0, 17, 34, 51, 68, 85, 102, 119, 136, 153, 170, 187, 204, 221, 238,	255,						// quarter
-0, 8, 17, 25, 34, 42, 51, 59, 68, 76, 85, 93, 102, 110, 119, 127,								// eighth
-0, 61, 122, 163, 245, 327, 429, 491, 552, 613, 654, 736, 818, 920, 982, 1105, 					// just
-0, 61, 130, 163, 245, 337, 441, 491, 552, 621, 654, 736, 828, 932, 982, 1105,					// pythagorean
-
-0, 272, 545, 818, 1090, 1363, 1636, 1909, 2181, 2454, 2727, 3000, 3272, 3545, 3818, 4091,		// equal 10v
-0, 136, 272, 409, 545, 682, 818, 955, 1091, 1228, 1364, 1501, 1637, 1774, 1910, 2047,			// equal 5v
-0, 68, 136, 204, 272, 341, 409, 477, 545, 613, 682, 750, 818, 886, 954, 1023,					// equal 2.5v
-0, 34, 68, 102, 136, 170, 204, 238, 272, 306, 340, 374, 408, 442, 476, 511,						// equal 1.25v
-0, 53, 118, 196, 291, 405, 542, 708, 908, 1149, 1441, 1792, 2216, 2728, 3345, 4091,				// log-ish 10v
-0, 136, 272, 409, 545, 682, 818, 955, 1091, 1228, 1364, 1501, 1637, 1774, 1910, 2047,			// log-ish 5v
-0, 745, 1362, 1874, 2298, 2649, 2941, 3182, 3382, 3548, 3685, 3799, 3894, 3972, 4037, 4091,		// exp-ish 10v
-0, 372, 681, 937, 1150, 1325, 1471, 1592, 1692, 1775, 1844, 1901, 1948, 1987, 2020, 2047		// exp-ish 5v
-*/
-
 };
 
 const u16 CHROMATIC[36] = {
@@ -250,7 +228,7 @@ void updateglobalLength(void);
 void adjustCounter(u8 index);
 void adjustAllCounters(void);
 u8 random8(void);
-void generateRandom(void);
+void generateRandom(u8 max, u8 paramCount);
 void mutate(void);
 
 void redraw(void);
@@ -296,8 +274,13 @@ void redrawGrid(void)
 	u8 seqOffset;
 
 	monomeLedBuffer[0] = monomeLedBuffer[16] = monomeLedBuffer[32] = monomeLedBuffer[48] = 
-	monomeLedBuffer[1] = monomeLedBuffer[17] = monomeLedBuffer[33] = monomeLedBuffer[49] = 
-	monomeLedBuffer[2] = monomeLedBuffer[18] = monomeLedBuffer[34] = monomeLedBuffer[50] = 4;
+	monomeLedBuffer[1] = monomeLedBuffer[17] = monomeLedBuffer[33] = monomeLedBuffer[49] = 4;
+	
+	seqOffset = globalCounter & 15;
+	monomeLedBuffer[2] = rotateScale[seqOffset] != 0 && showTriggers ? 7 : 4;
+	monomeLedBuffer[18] = rotateWeights[seqOffset] != 0 && showTriggers ? 7 : 4;
+	monomeLedBuffer[34] = mutateSeq[globalCounter & 63] != 0 && showTriggers ? 7 : 4;
+	monomeLedBuffer[50] = globalReset && !globalCounter && showTriggers ? 7 : 4;
 
 	if (gridParam == DIVISOR)
 	{
@@ -410,7 +393,7 @@ void redrawGrid(void)
 		monomeLedBuffer[33] = 15;
 		for (u8 i = 0; i < 4; i++)
 			for (u8 led = 0; led < 16; led++)
-				monomeLedBuffer[64+(i<<4)+led] = 0;
+				monomeLedBuffer[64+(i<<4)+led] = (i << 1) + ((led * 10) >> 4);
 	}
 	else if (gridParam == PRESETS)
 	{
@@ -717,11 +700,6 @@ void updateOutputs()
 	}
 
 	timer_add(&triggerTimer, 10, &triggerTimer_callback, NULL);
-	if (gridParam == SETTINGS)
-	{
-		showTriggers = 1;
-		timer_add(&triggerSettingsTimer, 100, &triggerSettingsTimer_callback, NULL);
-	}	
 	
 	// write to DAC
 	spi_selectChip(SPI,DAC_SPI);
@@ -742,34 +720,61 @@ u8 random8(void)
 	return (u8)((rnd() ^ adc[1]) & 0xff);
 }
 
-
-void generateRandom(void)
+void generateRandom(u8 max, u8 paramCount)
 {
-	for (u8 i = 0; i < 4; i++)
+	// max is expected to be 1-16
+	for (u8 i = 0; i < paramCount; i++)
 	{
-		divisor[i] = (random8() & 7) + 1;
-		phase[i] = random8() % 9;
-		reset[i] = random8() > 127 ? 0 : random8() % 9;
-		chance[i] = random8() > 127 ? 0 : random8() % 9;
+		u8 index = random8() & 3;
+		switch (random8() % 3)
+		{
+			case 0:
+				divisor[index] = (random8() % max) + 1;
+				break;
+			case 1:
+				phase[index] = random8() % (max + 1);
+				break;
+			case 2:
+				reset[index] = random8() % (max + 1);
+				break;
+		}
 	}
 }
 
 void mutate(void)
 {
-	u8 param = random8() % 3;
 	u8 index = random8() & 3;
-	switch (param)
+	switch (random8() % 3)
 	{
 		case 0:
-			divisor[index] = (random8() & 7) + 1;
+			if (random8() & 1)
+			{
+				if (divisor[index] > 1) divisor[index]--;
+			}
+			else
+			{
+				if (divisor[index] < 16) divisor[index]++;
+			}
 			break;
 		case 1:
-			phase[index] = random8() % 9;
+			if (random8() & 1)
+			{
+				if (phase[index] > 0) phase[index]--;
+			}
+			else
+			{
+				if (phase[index] < 16) phase[index]++;
+			}
 			break;
 		case 2:
-			reset[index] = random8() > 127 ? 0 : random8() % 9;
-			break;
-		case 3:
+			if (random8() & 1)
+			{
+				if (reset[index] > 0) reset[index]--;
+			}
+			else
+			{
+				if (reset[index] < 16) reset[index]++;
+			}
 			break;
 	}
 }
@@ -837,15 +842,16 @@ void clock(u8 phase) {
 			scales[scale][13] = scales[scale][12];
 			scales[scale][12] = scales[scale][11];
 			scales[scale][11] = scales[scale][10];
-			scales[scale][10] = scales[scale][09];
-			scales[scale][09] = scales[scale][08];
-			scales[scale][08] = scales[scale][07];
-			scales[scale][07] = scales[scale][06];
-			scales[scale][06] = scales[scale][05];
-			scales[scale][05] = scales[scale][04];
-			scales[scale][04] = scales[scale][03];
-			scales[scale][03] = scales[scale][02];
-			scales[scale][02] = scales[scale][01];
+			scales[scale][10] = scales[scale][9];
+			scales[scale][9] = scales[scale][8];
+			scales[scale][8] = scales[scale][7];
+			scales[scale][7] = scales[scale][6];
+			scales[scale][6] = scales[scale][5];
+			scales[scale][5] = scales[scale][4];
+			scales[scale][4] = scales[scale][3];
+			scales[scale][3] = scales[scale][2];
+			scales[scale][2] = scales[scale][1];
+			scales[scale][1] = scales[scale][0];
 			scales[scale][0] = lastScale;
 		}
 		
@@ -898,6 +904,8 @@ void clock(u8 phase) {
 		}
 		
 		updateOutputs();
+		showTriggers = 1;
+		timer_add(&triggerSettingsTimer, 100, &triggerSettingsTimer_callback, NULL);
 		redraw();
 	}
 	else {
@@ -1380,6 +1388,12 @@ static void handler_MonomeGridKey(s32 data) {
 		{
 			weight[y - 4] = x - 7;
 		}
+		redraw();
+		return;
+	}
+	else if (gridParam == RANDOMIZE)
+	{
+		generateRandom(x + 1, y - 3);
 		redraw();
 		return;
 	}

@@ -275,14 +275,14 @@ void redrawGrid(void)
 	u16 current, currentOn;
 	u8 seqOffset;
 
-	monomeLedBuffer[0] = monomeLedBuffer[16] = monomeLedBuffer[32] = monomeLedBuffer[48] = 
-	monomeLedBuffer[1] = monomeLedBuffer[17] = monomeLedBuffer[33] = monomeLedBuffer[49] = 4;
+	monomeLedBuffer[0] = monomeLedBuffer[16] = monomeLedBuffer[32] = monomeLedBuffer[48] = 8;
+	monomeLedBuffer[1] = monomeLedBuffer[17] = monomeLedBuffer[33] = monomeLedBuffer[49] = 3;
 	
 	seqOffset = globalCounter & 15;
-	monomeLedBuffer[2] = rotateScale[seqOffset] != 0 && showTriggers ? 7 : 4;
-	monomeLedBuffer[18] = rotateWeights[seqOffset] != 0 && showTriggers ? 7 : 4;
-	monomeLedBuffer[34] = mutateSeq[globalCounter & 63] != 0 && showTriggers ? 7 : 4;
-	monomeLedBuffer[50] = globalReset && !globalCounter && showTriggers ? 7 : 4;
+	monomeLedBuffer[2] = rotateScale[seqOffset] != 0 && showTriggers ? 11 : 8;
+	monomeLedBuffer[18] = rotateWeights[seqOffset] != 0 && showTriggers ? 11 : 8;
+	monomeLedBuffer[34] = mutateSeq[globalCounter & 63] != 0 && showTriggers ? 11 : 8;
+	monomeLedBuffer[50] = globalReset && !globalCounter && showTriggers ? 11 : 8;
 
 	if (gridParam == DIVISOR)
 	{
@@ -319,21 +319,21 @@ void redrawGrid(void)
 		u8 noteIndex;
 		u8 cvA = 0;
 		
-		for (u8 y = 0; y < 4; y++)
+		for (u8 x = 0; x < 4; x++)
 		{
 			// note selection 4x4 on the left
-			for (u8 x = 0; x < 4; x++)
-				monomeLedBuffer[64+(y<<4)+x] = currentScaleColumn == x ? 8 : 4;
+			for (u8 y = 0; y < 4; y++)
+				monomeLedBuffer[64+(y<<4)+x] = currentScaleRow == y ? 8 : 4;
 			
 			// clear note space
 			for (u8 col = 0; col < 12; col++)
 			{
-				monomeLedBuffer[68+(y<<4)+col] = 0;
+				monomeLedBuffer[68+(x<<4)+col] = 0;
 			}
 			
-			// display current note for the currently selected column
-			noteIndex = noteToIndex(scales[scale][(y<<2)+currentScaleColumn]);
-			monomeLedBuffer[68+(y<<4)+(noteIndex % 12)] = 4 + ((noteIndex / 12) << 2);
+			// display current note for the currently selected row
+			noteIndex = noteToIndex(scales[scale][(currentScaleRow<<2)+x]);
+			monomeLedBuffer[68+(x<<4)+(noteIndex % 12)] = 4 + ((noteIndex / 12) << 2);
 		}
 		
 		// current row, current column
@@ -461,7 +461,7 @@ void redrawGrid(void)
 		for (u8 i = 0; i < 64; i++)
 		{
 			add = step == i ? 3 : 0;
-			monomeLedBuffer[64 + i] = (i < globalReset ? 12 : 4) + add;
+			monomeLedBuffer[64 + i] = (i < globalReset ? 12 : 2) + add;
 		}
 	}
 	
@@ -477,7 +477,7 @@ void redrawGrid(void)
 		{
 			current = _counter + (divisor[seq] << 4) - phase[seq];
 			currentOn = (current / divisor[seq]) & 1;
-			monomeLedBuffer[13 - led + seqOffset] = currentOn ? 10 : 0;
+			monomeLedBuffer[13 - led + seqOffset] = currentOn ? 15 - led : 0;
 			
             _globalCounter++;
             if (_globalCounter >= globalLength || (globalReset && _globalCounter >= globalReset))
@@ -1369,22 +1369,28 @@ static void handler_MonomeGridKey(s32 data) {
 			return;
 		}
 		
-		currentScaleRow = y - 4;
+		
 		if (x < 4)
 		{
+			currentScaleRow = y - 4;
 			currentScaleColumn = x;
 			redraw();
 			return;
 		}
+		else
+		{
+			x = x - 4;
+			currentScaleColumn = y - 4;
+		}
 		
 		u8 noteIndex = noteToIndex(scales[scale][(currentScaleRow<<2)+currentScaleColumn]);
-		if (noteIndex % 12 == x - 4)
+		if (noteIndex % 12 == x) // same note, change octave
 		{
 			noteIndex = (noteIndex + 12) % 36;
 		}
 		else
 		{
-			noteIndex = x - 4;
+			noteIndex = x;
 		}
 		scales[scale][(currentScaleRow<<2)+currentScaleColumn] = indexToNote(noteIndex);
 		if (isScalePreview) updateOutputs();

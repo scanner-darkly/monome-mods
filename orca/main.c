@@ -159,6 +159,7 @@ u8 valueToShow = 0;
 u8 prevPotValue = 16;
 
 u8 isScalePreview = 0;
+u8 scalePreviewEnabled = 0;
 u8 scaleBlink = 0;
 u8 currentScaleRow = 0, currentScaleColumn = 0;
 
@@ -275,10 +276,8 @@ void redrawGrid(void)
 	u8 seqOffset;
 
 	monomeLedBuffer[0] = monomeLedBuffer[16] = monomeLedBuffer[32] = monomeLedBuffer[48] = 
-	monomeLedBuffer[1] = monomeLedBuffer[33] = monomeLedBuffer[49] = 4;
+	monomeLedBuffer[1] = monomeLedBuffer[17] = monomeLedBuffer[33] = monomeLedBuffer[49] = 4;
 	
-    monomeLedBuffer[17] = isScalePreview ? (scaleBlink ? 15 : 10) : 4;
-    
 	seqOffset = globalCounter & 15;
 	monomeLedBuffer[2] = rotateScale[seqOffset] != 0 && showTriggers ? 7 : 4;
 	monomeLedBuffer[18] = rotateWeights[seqOffset] != 0 && showTriggers ? 7 : 4;
@@ -315,7 +314,8 @@ void redrawGrid(void)
 	}
 	else if (gridParam == SCALE)
 	{
-		monomeLedBuffer[1] = 15;
+		monomeLedBuffer[1] = isScalePreview ? (scaleBlink ? 15 : 10) : 15;
+
 		u8 noteIndex;
 		u8 cvA = 0;
 		
@@ -355,6 +355,15 @@ void redrawGrid(void)
 				monomeLedBuffer[68+((cvA&12)<<2)+(noteIndex%12)] = 15;
 			}
 			monomeLedBuffer[64+((cvA&12)<<2)+(cvA&3)] = 15;
+		}
+		
+		if (scalePressed)
+		{
+			for (u8 i = 0; i < 16; i++)
+			{
+				monomeLedBuffer[96 + i] = i;
+				monomeLedBuffer[112 + i] = i == scale ? 15 : 8;
+			}
 		}
 	}
 	else if (gridParam == SETTINGS)
@@ -468,7 +477,7 @@ void redrawGrid(void)
 		{
 			current = _counter + (divisor[seq] << 4) - phase[seq];
 			currentOn = (current / divisor[seq]) & 1;
-			monomeLedBuffer[13 - led + seqOffset] = (currentOn ? 13 - led : 0) + (!_globalCounter && !_counter && globalReset ? 2 : 0);
+			monomeLedBuffer[13 - led + seqOffset] = currentOn ? 10 : 0;
 			
             _globalCounter++;
             if (_globalCounter >= globalLength || (globalReset && _globalCounter >= globalReset))
@@ -636,7 +645,7 @@ void updateOutputs()
 {
 	timer_remove(&triggerTimer);
 
-	if ((gridParam == SCALE) && isScalePreview)
+	if (gridParam == SCALE && isScalePreview)
 	{
 		gpio_set_gpio_pin(TRIGGERS[0]);
 		gpio_set_gpio_pin(TRIGGERS[1]);
@@ -838,7 +847,7 @@ void clock(u8 phase) {
 		
 		seq16 = globalCounter & 15;
 		
-		if (!isScalePreview && rotateScale[seq16] < 0)
+		if (!(gridParam == SCALE && isScalePreview) && rotateScale[seq16] < 0)
 		for (s8 j = 0; j < -rotateScale[seq16]; j++)
 		{
 			u16 lastScale = scales[scale][15];
@@ -860,7 +869,7 @@ void clock(u8 phase) {
 			scales[scale][0] = lastScale;
 		}
 		
-		if (!isScalePreview && rotateScale[seq16] > 0)
+		if (!(gridParam == SCALE && isScalePreview) && rotateScale[seq16] > 0)
 		for (s8 j = 0; j < rotateScale[seq16]; j++)
 		{
 			u16 firstScale = scales[scale][0];
@@ -882,7 +891,7 @@ void clock(u8 phase) {
 			scales[scale][15] = firstScale;
 		}
 
-		if (!isScalePreview && rotateWeights[seq16] < 0)
+		if (!(gridParam == SCALE && isScalePreview) && rotateWeights[seq16] < 0)
 		for (s8 j = 0; j < -rotateWeights[seq16]; j++)
 		{
 			u8 temp = weight[3];
@@ -892,7 +901,7 @@ void clock(u8 phase) {
 			weight[0] = temp;
 		}
 		
-		if (!isScalePreview && rotateWeights[seq16] > 0)
+		if (!(gridParam == SCALE && isScalePreview) && rotateWeights[seq16] > 0)
 		for (s8 j = 0; j < rotateWeights[seq16]; j++)
 		{
 			u8 temp = weight[0];
@@ -902,7 +911,7 @@ void clock(u8 phase) {
 			weight[3] = temp;
 		}
 		
-		if (!isScalePreview && mutateSeq[globalCounter & 63])
+		if (!(gridParam == SCALE && isScalePreview) && mutateSeq[globalCounter & 63])
 		{
 			mutate();
 			adjustAllCounters();
@@ -1271,7 +1280,8 @@ static void handler_MonomeGridKey(s32 data) {
 	{
 		if (x == 1 && y == 0)
 		{
-			scalePressed = 0;
+			if (scalePreviewEnabled) isScalePreview = !isScalePreview;
+			scalePreviewEnabled = scalePressed = 0;
 		}
 	
 		return;
@@ -1292,7 +1302,7 @@ static void handler_MonomeGridKey(s32 data) {
 	{
 		if (y == 0)
 		{
-			if (gridParam == SCALE) isScalePreview = !isScalePreview;
+			if (gridParam == SCALE) scalePreviewEnabled = 1;
 			gridParam = SCALE;
 			scalePressed = 1;
 		}
@@ -1341,6 +1351,24 @@ static void handler_MonomeGridKey(s32 data) {
 	
 	if (gridParam == SCALE)
 	{
+		if (scalePressed && y > 5)
+		{
+			scalePreviewEnabled = 0;
+			if (y == 6)
+			{
+				for (u8 i = 0; i < 16; i++)
+				{
+					scales[scale][i] = SCALE_PRESETS[x][i];
+				}
+			}
+			else
+			{
+				scale = x;
+			}
+			redraw();
+			return;
+		}
+		
 		currentScaleRow = y - 4;
 		if (x < 4)
 		{

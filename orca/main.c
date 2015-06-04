@@ -159,6 +159,7 @@ u8 valueToShow = 0;
 u8 prevPotValue = 16;
 
 u8 isScalePreview = 0;
+u8 scaleBlink = 0;
 u8 currentScaleRow = 0, currentScaleColumn = 0;
 
 u8 arc2index = 0; // 0 - show rings 1&2, 1 - show rings 3&4
@@ -274,8 +275,10 @@ void redrawGrid(void)
 	u8 seqOffset;
 
 	monomeLedBuffer[0] = monomeLedBuffer[16] = monomeLedBuffer[32] = monomeLedBuffer[48] = 
-	monomeLedBuffer[1] = monomeLedBuffer[17] = monomeLedBuffer[33] = monomeLedBuffer[49] = 4;
+	monomeLedBuffer[1] = monomeLedBuffer[33] = monomeLedBuffer[49] = 4;
 	
+    monomeLedBuffer[17] = isScalePreview ? (scaleBlink ? 15 : 10) : 4;
+    
 	seqOffset = globalCounter & 15;
 	monomeLedBuffer[2] = rotateScale[seqOffset] != 0 && showTriggers ? 7 : 4;
 	monomeLedBuffer[18] = rotateWeights[seqOffset] != 0 && showTriggers ? 7 : 4;
@@ -455,20 +458,20 @@ void redrawGrid(void)
 	
 	// tracks
 	u16 _counter;
-	u64 _globalCounter, _globalLength;
+	u64 _globalCounter;
 	for (u8 seq = 0; seq < 4; seq++)
 	{
 		_globalCounter = globalCounter;
-		_globalLength = globalLength;
 		_counter = counter[seq];
 		seqOffset = seq << 4;
 		for (u8 led = 0; led < 11; led++)
 		{
 			current = _counter + (divisor[seq] << 4) - phase[seq];
-			currentOn = current / divisor[seq];
-			monomeLedBuffer[13 - led + seqOffset] = (currentOn & 1) << 3;
+			currentOn = (current / divisor[seq]) & 1;
+			monomeLedBuffer[13 - led + seqOffset] = (currentOn ? 13 - led : 0) + (!_globalCounter && !_counter && globalReset ? 2 : 0);
 			
-			if (++_globalCounter >= _globalLength) 
+            _globalCounter++;
+            if (_globalCounter >= globalLength || (globalReset && _globalCounter >= globalReset))
 			{
 				_globalCounter = _counter = 0;
 			}
@@ -810,6 +813,8 @@ void clock(u8 phase) {
 	{
 		gpio_set_gpio_pin(B10);
 
+        scaleBlink = ~scaleBlink;
+        
 		globalCounter++;
 		if (globalCounter >= globalLength || (globalReset && globalCounter >= globalReset))
 		{
@@ -833,7 +838,7 @@ void clock(u8 phase) {
 		
 		seq16 = globalCounter & 15;
 		
-		if (rotateScale[seq16] < 0)
+		if (!isScalePreview && rotateScale[seq16] < 0)
 		for (s8 j = 0; j < -rotateScale[seq16]; j++)
 		{
 			u16 lastScale = scales[scale][15];
@@ -855,7 +860,7 @@ void clock(u8 phase) {
 			scales[scale][0] = lastScale;
 		}
 		
-		if (rotateScale[seq16] > 0)
+		if (!isScalePreview && rotateScale[seq16] > 0)
 		for (s8 j = 0; j < rotateScale[seq16]; j++)
 		{
 			u16 firstScale = scales[scale][0];
@@ -877,7 +882,7 @@ void clock(u8 phase) {
 			scales[scale][15] = firstScale;
 		}
 
-		if (rotateWeights[seq16] < 0)
+		if (!isScalePreview && rotateWeights[seq16] < 0)
 		for (s8 j = 0; j < -rotateWeights[seq16]; j++)
 		{
 			u8 temp = weight[3];
@@ -887,7 +892,7 @@ void clock(u8 phase) {
 			weight[0] = temp;
 		}
 		
-		if (rotateWeights[seq16] > 0)
+		if (!isScalePreview && rotateWeights[seq16] > 0)
 		for (s8 j = 0; j < rotateWeights[seq16]; j++)
 		{
 			u8 temp = weight[0];
@@ -897,7 +902,7 @@ void clock(u8 phase) {
 			weight[3] = temp;
 		}
 		
-		if (mutateSeq[globalCounter & 63])
+		if (!isScalePreview && mutateSeq[globalCounter & 63])
 		{
 			mutate();
 			adjustAllCounters();
@@ -1082,7 +1087,7 @@ static void handler_PollADC(s32 data) {
 	clock_temp = i;
 
 	// PARAM POT INPUT
-	u8 newPotValue = adc[1] >> 8; // should be in the range 0-15
+	u8 newPotValue = (adc[1] >> 8) & 15; // should be in the range 0-15
 	if (newPotValue != prevPotValue)
 	{
 		prevPotValue = scale = newPotValue;
@@ -1609,6 +1614,8 @@ int main(void)
 	init_usb_host();
 	init_monome();
 
+    prevPotValue = (adc[1] >> 8) & 15;
+
 	if(flash_is_fresh()) {
 		initializeValues();
 	}
@@ -1623,7 +1630,7 @@ int main(void)
 	timer_add(&keyTimer,50,&keyTimer_callback, NULL);
 	timer_add(&adcTimer,100,&adcTimer_callback, NULL);
 	clock_temp = 10000; // out of ADC range to force tempo
-
+    
 	updateOutputs();
 	redraw();
 	

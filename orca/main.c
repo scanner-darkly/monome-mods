@@ -161,6 +161,7 @@ u8 prevPotValue = 16;
 u8 isScalePreview = 0;
 u8 scalePreviewEnabled = 0;
 u8 scaleBlink = 0;
+u8 prevSelectedScaleColumn = 4;
 u8 currentScaleRow = 0, currentScaleColumn = 0;
 
 u8 arc2index = 0; // 0 - show rings 1&2, 1 - show rings 3&4
@@ -316,55 +317,62 @@ void redrawGrid(void)
 	{
 		monomeLedBuffer[1] = isScalePreview ? (scaleBlink ? 15 : 10) : 15;
 
-		u8 noteIndex;
-		u8 cvA = 0;
-		
-		for (u8 x = 0; x < 4; x++)
-		{
-			// note selection 4x4 on the left
-			for (u8 y = 0; y < 4; y++)
-				monomeLedBuffer[64+(y<<4)+x] = currentScaleRow == y ? 8 : 4;
-			
-			// clear note space
-			for (u8 col = 0; col < 12; col++)
-			{
-				monomeLedBuffer[68+(x<<4)+col] = 0;
-			}
-			
-			// display current note for the currently selected row
-			noteIndex = noteToIndex(scales[scale][(currentScaleRow<<2)+x]);
-			monomeLedBuffer[68+(x<<4)+(noteIndex % 12)] = 4 + ((noteIndex / 12) << 2);
-		}
-		
-		// current row, current column
-		monomeLedBuffer[64+(currentScaleRow<<4)+currentScaleColumn] = 12;
-
-		// highlight the current note
-		if (!isScalePreview)
-		{
-			for (u8 seq = 0; seq < 4; seq++)
-			{
-				current = counter[seq] + (divisor[seq] << 6) - phase[seq];
-				currentOn = (current / divisor[seq]) & 1;
-				if (currentOn && (mixerA & (1 << seq))) cvA += weight[seq];
-			}
-			cvA &= 0xf;
-			noteIndex = noteToIndex(scales[scale][cvA]);
-			if ((cvA&3) == currentScaleColumn)
-			{
-				monomeLedBuffer[68+((cvA&12)<<2)+(noteIndex%12)] = 15;
-			}
-			monomeLedBuffer[64+((cvA&12)<<2)+(cvA&3)] = 15;
-		}
-		
 		if (scalePressed)
-		{
+        {
 			for (u8 i = 0; i < 16; i++)
 			{
-				monomeLedBuffer[96 + i] = i;
+				monomeLedBuffer[64 + i] = monomeLedBuffer[96 + i] = 0;
+				monomeLedBuffer[80 + i] = i;
 				monomeLedBuffer[112 + i] = i == scale ? 15 : 8;
 			}
-		}
+        }
+        else
+        {
+            u8 noteIndex;
+            u8 cvA = 0;
+            
+            for (u8 x = 0; x < 4; x++)
+            {
+                // note selection 4x4 on the left
+                for (u8 y = 0; y < 4; y++)
+                    monomeLedBuffer[64 + (y << 4) + x] = currentScaleRow == y ? 8 : 4;
+                
+                // clear note space
+                for (u8 col = 0; col < 12; col++)
+                {
+                    monomeLedBuffer[68 + (x << 4) + col] = 0;
+                }
+                
+                // display current note for the currently selected row
+                noteIndex = noteToIndex(scales[scale][(currentScaleRow << 2) + x]);
+                monomeLedBuffer[68 + (x << 4) + (noteIndex % 12)] = 4 + ((noteIndex / 12) << 2);
+            }
+            
+            // currently selected note in the 4x4 block
+            monomeLedBuffer[64 + (currentScaleRow << 4) + currentScaleColumn] = 15;
+
+            // highlight the current note
+            if (!isScalePreview)
+            {
+                for (u8 seq = 0; seq < 4; seq++)
+                {
+                    current = counter[seq] + (divisor[seq] << 6) - phase[seq];
+                    currentOn = (current / divisor[seq]) & 1;
+                    if (currentOn && (mixerA & (1 << seq))) cvA += weight[seq];
+                }
+                cvA &= 0xf;
+                
+                // highlight it in the 4x4 block
+                monomeLedBuffer[64+((cvA>>2)<<4)+(cvA&3)] = 15;
+
+                // highlight it in the note space
+                if ((cvA>>2) == currentScaleRow)
+                {
+                    noteIndex = noteToIndex(scales[scale][cvA]) % 12;
+                    monomeLedBuffer[68 + ((cvA & 3) << 4) + noteIndex] += 3;
+                }
+            }
+        }    
 	}
 	else if (gridParam == SETTINGS)
 	{
@@ -673,7 +681,6 @@ void updateOutputs()
 			{
 				if (currentOn && (mixerA & (1 << seq))) cvA += weight[seq];
 				if (currentOn && (mixerB & (1 << seq))) cvB += weight[seq]; 
-				
 				
 				for (u8 trig = 0; trig < 4; trig++)
 				{
@@ -1351,17 +1358,17 @@ static void handler_MonomeGridKey(s32 data) {
 	
 	if (gridParam == SCALE)
 	{
-		if (scalePressed && y > 5)
+		if (scalePressed)
 		{
 			scalePreviewEnabled = 0;
-			if (y == 6)
+			if (y == 5)
 			{
 				for (u8 i = 0; i < 16; i++)
 				{
 					scales[scale][i] = SCALE_PRESETS[x][i];
 				}
 			}
-			else
+			else if (y == 7)
 			{
 				scale = x;
 			}
@@ -1369,29 +1376,31 @@ static void handler_MonomeGridKey(s32 data) {
 			return;
 		}
 		
-		
 		if (x < 4)
 		{
 			currentScaleRow = y - 4;
 			currentScaleColumn = x;
+            prevSelectedScaleColumn = 4;
+            
 			redraw();
 			return;
 		}
+        
+        x -= 4;
+        currentScaleColumn = y - 4; // yep, y sets column here as the "piano roll" is pivoted
+        u8 noteIndex = noteToIndex(scales[scale][(currentScaleRow<<2)+currentScaleColumn]); // currently selected note
+        
+		if (noteIndex % 12 == x) // same note
+		{
+            if (prevSelectedScaleColumn == currentScaleColumn)
+                noteIndex = (noteIndex + 12) % 36;
+		}
 		else
 		{
-			x = x - 4;
-			currentScaleColumn = y - 4;
+			noteIndex = x + noteIndex / 12 * 12;
 		}
-		
-		u8 noteIndex = noteToIndex(scales[scale][(currentScaleRow<<2)+currentScaleColumn]);
-		if (noteIndex % 12 == x) // same note, change octave
-		{
-			noteIndex = (noteIndex + 12) % 36;
-		}
-		else
-		{
-			noteIndex = x;
-		}
+        prevSelectedScaleColumn = currentScaleColumn;
+        
 		scales[scale][(currentScaleRow<<2)+currentScaleColumn] = indexToNote(noteIndex);
 		if (isScalePreview) updateOutputs();
 		redraw();

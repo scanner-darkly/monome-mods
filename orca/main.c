@@ -149,6 +149,7 @@ u16 clock_time, clock_temp;
 static softTimer_t triggerTimer = { .next = NULL, .prev = NULL };
 static softTimer_t triggerSettingsTimer = { .next = NULL, .prev = NULL };
 static softTimer_t flashSavedTimer = { .next = NULL, .prev = NULL };
+static softTimer_t doublePressTimer = { .next = NULL, .prev = NULL };
 
 u16 adc[4];
 u8 front_timer;
@@ -173,6 +174,8 @@ u8 fire[4] = {0, 0, 0, 0};
 u8 flashConfirmation = 0;
 u8 showTriggers = 0;
 u8 scalePressed = 0;
+u8 prevXPressed = 16, prevXReleased = 16, prevYPressed = 8, prevYReleased = 8;
+u8 randomizeX = 16, randomizeY = 4;
 
 u8 scale;
 u16 scales[16][16];
@@ -180,7 +183,7 @@ u8 isDivisorArc, isPhaseArc, isChanceArc, isMixerArc;
 u8 divisorArc, phaseArc, chanceArc, mixerArc;
 u8 divisor[4], phase[4], reset[4], chance[4], weight[4];
 u8 gateType[4], gateMuted[4], gateLogic[4], gateNot[4], gateTracks[4];
-u8 mixerA, mixerB;
+u8 mixerA, mixerB, alwaysOnA, alwaysOnB;
 s8 rotateScale[16], rotateWeights[16]; 
 u8 mutateSeq[64];
 u8 globalReset;
@@ -242,6 +245,7 @@ void showValue(u8 value);
 static void triggerTimer_callback(void* o);
 static void triggerSettingsTimer_callback(void* o);
 static void flashSavedTimer_callback(void* o);
+static void doublePressTimer_callback(void* o);
 
 ////////////////////////////////////////////////////////////////////////////////
 // application clock code
@@ -276,14 +280,14 @@ void redrawGrid(void)
 	u16 current, currentOn;
 	u8 seqOffset;
 
-	monomeLedBuffer[0] = monomeLedBuffer[16] = monomeLedBuffer[32] = monomeLedBuffer[48] = 8;
+	monomeLedBuffer[0] = monomeLedBuffer[16] = monomeLedBuffer[32] = monomeLedBuffer[48] = 5;
 	monomeLedBuffer[1] = monomeLedBuffer[17] = monomeLedBuffer[33] = monomeLedBuffer[49] = 3;
 	
 	seqOffset = globalCounter & 15;
-	monomeLedBuffer[2] = rotateScale[seqOffset] != 0 && showTriggers ? 11 : 8;
-	monomeLedBuffer[18] = rotateWeights[seqOffset] != 0 && showTriggers ? 11 : 8;
-	monomeLedBuffer[34] = mutateSeq[globalCounter & 63] != 0 && showTriggers ? 11 : 8;
-	monomeLedBuffer[50] = globalReset && !globalCounter && showTriggers ? 11 : 8;
+	monomeLedBuffer[2] = rotateScale[seqOffset] != 0 && showTriggers ? 10 : 5;
+	monomeLedBuffer[18] = rotateWeights[seqOffset] != 0 && showTriggers ? 10 : 5;
+	monomeLedBuffer[34] = mutateSeq[globalCounter & 63] != 0 && showTriggers ? 10 : 5;
+	monomeLedBuffer[50] = globalReset && !globalCounter && showTriggers ? 10 : 5;
 
 	if (gridParam == DIVISOR)
 	{
@@ -358,7 +362,7 @@ void redrawGrid(void)
                 {
                     current = counter[seq] + (divisor[seq] << 6) - phase[seq];
                     currentOn = (current / divisor[seq]) & 1;
-                    if (currentOn && (mixerA & (1 << seq))) cvA += weight[seq];
+                    if (currentOn && ((alwaysOnA | mixerA) & (1 << seq))) cvA += weight[seq];
                 }
                 cvA &= 0xf;
                 
@@ -412,8 +416,13 @@ void redrawGrid(void)
 	{
 		monomeLedBuffer[33] = 15;
 		for (u8 i = 0; i < 4; i++)
+		{
 			for (u8 led = 0; led < 16; led++)
-				monomeLedBuffer[64+(i<<4)+led] = (i << 1) + ((led * 10) >> 4);
+			{
+				monomeLedBuffer[64+(i<<4)+led] = i == randomizeY ? (15 - (i << 1) - ((led * 10) >> 4)) : ((i << 1) + ((led * 10) >> 4));
+			}
+			monomeLedBuffer[64+(i<<4)+randomizeX] = 15 - (i << 1) - ((randomizeX * 10) >> 4);
+		}
 	}
 	else if (gridParam == PRESETS)
 	{
@@ -507,9 +516,13 @@ void redrawGrid(void)
 		}
 		
 		current = counter[seq] + (divisor[seq] << 4) - phase[seq];
-		currentOn = current / divisor[seq];
-		monomeLedBuffer[14 + seqOffset] = (mixerA & (1 << seq)) ? ((currentOn & 1) ? 15 : 8) : 0;
-		monomeLedBuffer[15 + seqOffset] = (mixerB & (1 << seq)) ? ((currentOn & 1) ? 15 : 8) : 0;
+		currentOn = (current / divisor[seq]) & 1;
+		
+		// TODO revise this part
+		monomeLedBuffer[14 + seqOffset] = alwaysOnA & (1 << seq) ? 15 : (mixerA & (1 << seq) ? 10 : 4);
+		if (currentOn) monomeLedBuffer[14 + seqOffset] += 3;
+		monomeLedBuffer[15 + seqOffset] = alwaysOnB & (1 << seq) ? 15 : (mixerB & (1 << seq) ? 10 : 4);
+		if (currentOn) monomeLedBuffer[15 + seqOffset] += 3;
 	}
 	
 	if (valueToShow == 5) // show scale
@@ -679,8 +692,8 @@ void updateOutputs()
 			
 			if (chance[seq] < ((rnd() % 20)+1))
 			{
-				if (currentOn && (mixerA & (1 << seq))) cvA += weight[seq];
-				if (currentOn && (mixerB & (1 << seq))) cvB += weight[seq]; 
+				if (currentOn && ((alwaysOnA | mixerA) & (1 << seq))) cvA += weight[seq];
+				if (currentOn && ((alwaysOnB | mixerB) & (1 << seq))) cvB += weight[seq]; 
 				
 				for (u8 trig = 0; trig < 4; trig++)
 				{
@@ -1029,6 +1042,13 @@ static void flashSavedTimer_callback(void* o) {
 	redraw();
 }
 
+static void doublePressTimer_callback(void* o)
+{
+	timer_remove(&doublePressTimer);
+	prevXPressed = prevXReleased = 16;
+	prevYPressed = prevYReleased = 8;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // event handlers
 
@@ -1261,6 +1281,7 @@ static void handler_MonomeRingEnc(s32 data) {
 				{
 					isMixerArc = 1;
 					mixerArc = 0;
+					alwaysOnA = alwaysOnB = 0;
 				}
 				else if (delta > 0)
 				{
@@ -1278,13 +1299,20 @@ static void handler_MonomeRingEnc(s32 data) {
 	}
 }
 
-static void handler_MonomeGridKey(s32 data) { 
+static void handler_MonomeGridKey(s32 data)
+{ 
 	u8 x, y, z;
 	monome_grid_key_parse_event_data(data, &x, &y, &z);
 	// z == 0 key up, z == 1 key down
+
+	timer_remove(&doublePressTimer);
+	timer_add(&doublePressTimer, 200, &doublePressTimer_callback, NULL);
 	
 	if (!z) 
 	{
+		prevXReleased = x;
+		prevYReleased = y;
+		
 		if (x == 1 && y == 0)
 		{
 			if (scalePreviewEnabled) isScalePreview = !isScalePreview;
@@ -1293,6 +1321,10 @@ static void handler_MonomeGridKey(s32 data) {
 	
 		return;
 	}
+	
+	u8 doublePress = prevXPressed == prevXReleased && prevXReleased == x && prevYPressed == prevYReleased && prevYReleased == y;
+	prevXPressed = x;
+	prevYPressed = y;
 	
 	if (x == 0 && y < 4) // select divisor / phase / reset / chance 
 	{
@@ -1323,10 +1355,26 @@ static void handler_MonomeGridKey(s32 data) {
 	
 	if (x == 2 && y < 4) // select rotate scale / rotate weights / mutate seq / global reset
 	{
-		if (y == 0) gridParam = ROTATESCALE;
-		else if (y == 1) gridParam = ROTATEWEIGHTS;
-		else if (y == 2) gridParam = MUTATESEQ;
-		else if (y == 3) gridParam = GLOBALRESET;
+		if (y == 0)
+		{
+			gridParam = ROTATESCALE;
+			if (doublePress) for (u8 i = 0; i < 16; i++) rotateScale[i] = 0;
+		}
+		else if (y == 1)
+		{
+			gridParam = ROTATEWEIGHTS;
+			if (doublePress) for (u8 i = 0; i < 16; i++) rotateWeights[i] = 0;
+		}
+		else if (y == 2) 
+		{
+			gridParam = MUTATESEQ;
+			if (doublePress) for (u8 i = 0; i < 64; i++) mutateSeq[i] = 0;
+		}
+		else if (y == 3)
+		{
+			gridParam = GLOBALRESET;
+			if (doublePress) globalCounter = globalLength;
+		}
 		
 		redraw();
 		return;
@@ -1334,20 +1382,37 @@ static void handler_MonomeGridKey(s32 data) {
 	
 	if (x == 14 && y < 4) // CV A mixing
 	{
-		if (mixerA & (1 << y))
-			mixerA &= ~(1 << y);
+		if (doublePress)
+		{
+			alwaysOnA |= 1 << y;
+		}
 		else
-			mixerA |= (1 << y);
+		{
+			alwaysOnA &= ~(1 << y);
+			if (mixerA & (1 << y))
+				mixerA &= ~(1 << y);
+			else
+				mixerA |= (1 << y);
+		}
+		
 		redraw();
 		return;
 	}
 
 	if (x == 15 && y < 4) // CV B mixing
 	{
-		if (mixerB & (1 << y))
-			mixerB &= ~(1 << y);
+		if (doublePress)
+		{
+			alwaysOnB |= 1 << y;
+		}
 		else
-			mixerB |= (1 << y);
+		{
+			alwaysOnB &= ~(1 << y);
+			if (mixerB & (1 << y))
+				mixerB &= ~(1 << y);
+			else
+				mixerB |= (1 << y);
+		}
 		redraw();
 		return;
 	}
@@ -1382,6 +1447,7 @@ static void handler_MonomeGridKey(s32 data) {
 			currentScaleColumn = x;
             prevSelectedScaleColumn = 4;
             
+			if (isScalePreview) updateOutputs();
 			redraw();
 			return;
 		}
@@ -1441,7 +1507,9 @@ static void handler_MonomeGridKey(s32 data) {
 	}
 	else if (gridParam == RANDOMIZE)
 	{
-		generateRandom(x + 1, y - 3);
+		randomizeX = x;
+		randomizeY = y - 3;
+		generateRandom(randomizeX + 1, randomizeY);
 		redraw();
 		return;
 	}
@@ -1595,8 +1663,11 @@ void flash_read(void) {
 void initializeValues(void)
 {
 	isDivisorArc = isPhaseArc = isChanceArc = isMixerArc = divisorArc = phaseArc = chanceArc = mixerArc = 0;
+	
 	mixerA = MIXER_PRESETS[0][0];
 	mixerB = MIXER_PRESETS[0][1];
+	alwaysOnA = alwaysOnB = 0;
+	
 	for (u8 i = 0; i < 4; i++)
 	{
 		divisor[i] = DIVISOR_PRESETS[0][i];

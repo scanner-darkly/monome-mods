@@ -173,6 +173,7 @@ u8 gridParam = 0;
 u64 globalCounter = 0, globalLength;
 u16 counter[4] = {0, 0, 0, 0};
 u8 fire[4] = {0, 0, 0, 0};
+u16 prevOn[4] = {0, 0, 0, 0};
 u8 flashConfirmation = 0;
 u8 showTriggers = 0, showRandomized = 0, showPresetSaved = 0, presetToShow = 0;
 u8 scalePressed = 0, presetPressed = 0;
@@ -452,14 +453,14 @@ void redrawGrid(void)
 		monomeLedBuffer[49] = 15;
         for (u8 i = 0; i < 8; i++)
         {
-            monomeLedBuffer[64+(i<<1)] = i == currentPreset ? 14 : (i & 1 ? 8 : 4);
+            monomeLedBuffer[64+(i<<1)] = i == currentPreset ? 0 : (i & 1 ? 8 : 4);
             monomeLedBuffer[65+(i<<1)] = i == currentPreset ? 14 : (i & 1 ? 8 : 4);
             monomeLedBuffer[80+(i<<1)] = i == currentPreset ? 14 : (i & 1 ? 8 : 4);
             monomeLedBuffer[81+(i<<1)] = i == currentPreset ? 14 : (i & 1 ? 8 : 4);
         }
         for (u8 i = 0; i < 8; i++)
         {
-            monomeLedBuffer[96+(i<<1)] = (i+8) == currentPreset ? 14 : (i & 1 ? 4 : 8);
+            monomeLedBuffer[96+(i<<1)] = (i+8) == currentPreset ? 0 : (i & 1 ? 4 : 8);
             monomeLedBuffer[97+(i<<1)] = (i+8) == currentPreset ? 14 : (i & 1 ? 4 : 8);
             monomeLedBuffer[112+(i<<1)] = (i+8) == currentPreset ? 14 : (i & 1 ? 4 : 8);
             monomeLedBuffer[113+(i<<1)] = (i+8) == currentPreset ? 14 : (i & 1 ? 4 : 8);
@@ -716,7 +717,7 @@ void updateOutputs()
 	else
 	{
 		u8 cvA = 0, cvB = 0;
-		u16 prevOn, currentOn, trigOn, offset;
+		u16 currentOn, trigOn, offset;
 		u8 trackIncluded;
 		fire[0] = gateLogic[0] && gateTracks[0];
 		fire[1] = gateLogic[1] && gateTracks[1];
@@ -727,7 +728,6 @@ void updateOutputs()
 		{
 			offset = counter[seq] + (divisor[seq] << 6) - phase[seq];
 			currentOn = (offset / divisor[seq]) & 1;
-			prevOn = ((offset - 1) / divisor[seq]) & 1;
 			
 			if (chance[seq] < ((rnd() % 20)+1))
 			{
@@ -737,7 +737,7 @@ void updateOutputs()
 				for (u8 trig = 0; trig < 4; trig++)
 				{
 					trackIncluded = gateTracks[trig] & (1 << seq);
-					trigOn = !gateType[trig] ? prevOn != currentOn : !prevOn && currentOn;
+					trigOn = !gateType[trig] ? prevOn[seq] != currentOn : !prevOn[seq] && currentOn;
 					
 					if (gateLogic[trig]) // AND
 					{
@@ -749,6 +749,8 @@ void updateOutputs()
 					}
 				}
 			}
+			
+			prevOn[seq] = currentOn;
 		}
 
 		if (gateNot[0]) fire[0] = !fire[0];
@@ -1161,7 +1163,11 @@ static void handler_PollADC(s32 data) {
 
 	// PARAM POT INPUT
 	u8 newPotValue = (adc[1] >> 8) & 15; // should be in the range 0-15
-	if (newPotValue != prevPotValue)
+	if (prevPotValue == 16) // haven't read the value yet
+	{
+		prevPotValue = newPotValue;
+	}
+	else if (newPotValue != prevPotValue)
 	{
 		prevPotValue = scale = newPotValue;
 		showValue(5);
@@ -1568,8 +1574,8 @@ static void handler_MonomeGridKey(s32 data)
         if (presetPressed)
         {
             showPresetSaved = 1;
-            presetToShow = ((y >> 1) << 3) + (x >> 1);
-            savePreset(presetToShow);
+            currentPreset = presetToShow = ((y >> 1) << 3) + (x >> 1);
+            savePreset(currentPreset);
         }
         else
         {
@@ -1866,14 +1872,10 @@ int main(void)
 	init_usb_host();
 	init_monome();
 
-    prevPotValue = (adc[1] >> 8) & 15;
-
-	if(flash_is_fresh()) {
+	if (flash_is_fresh())
 		initializeValues();
-	}
-	else {
+	else 
 		flash_read();
-	}
 
 	clock_pulse = &clock;
 	clock_external = !gpio_get_pin_value(B09);

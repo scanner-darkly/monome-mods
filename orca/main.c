@@ -172,11 +172,12 @@ u64 globalCounter = 0, globalLength;
 u16 counter[4] = {0, 0, 0, 0};
 u8 fire[4] = {0, 0, 0, 0};
 u8 flashConfirmation = 0;
-u8 showTriggers = 0;
-u8 scalePressed = 0;
+u8 showTriggers = 0, showRandomized = 0, showPresetSaved = 0, presetToShow = 0;
+u8 scalePressed = 0, presetPressed = 0;
 u8 prevXPressed = 16, prevXReleased = 16, prevYPressed = 8, prevYReleased = 8;
 u8 randomizeX = 16, randomizeY = 4;
 
+u8 currentPreset;
 u8 scale;
 u16 scales[16][16];
 u8 isDivisorArc, isPhaseArc, isChanceArc, isMixerArc;
@@ -236,6 +237,8 @@ void adjustAllCounters(void);
 u8 random8(void);
 void generateRandom(u8 max, u8 paramCount);
 void mutate(void);
+void loadPreset(void);
+void savePreset(u8 presetToSave);
 
 void redraw(void);
 void redrawArc(void);
@@ -289,7 +292,13 @@ void redrawGrid(void)
 	monomeLedBuffer[34] = mutateSeq[globalCounter & 63] != 0 && showTriggers ? 10 : 5;
 	monomeLedBuffer[50] = globalReset && !globalCounter && showTriggers ? 10 : 5;
 
-	if (gridParam == DIVISOR)
+    if (valueToShow == 6)
+    {
+		for (u8 i = 0; i < 4; i++)
+			for (u8 led = 0; led < 16; led++)
+				monomeLedBuffer[64+(i<<4)+led] = led < (counter[i] & 15) ? 15 : 0;
+    }
+    else if (gridParam == DIVISOR)
 	{
 		monomeLedBuffer[0] = 15;
 		for (u8 i = 0; i < 4; i++)
@@ -353,7 +362,7 @@ void redrawGrid(void)
             }
             
             // currently selected note in the 4x4 block
-            monomeLedBuffer[64 + (currentScaleRow << 4) + currentScaleColumn] = 15;
+            monomeLedBuffer[64 + (currentScaleRow << 4) + currentScaleColumn] = 13;
 
             // highlight the current note
             if (!isScalePreview)
@@ -423,13 +432,33 @@ void redrawGrid(void)
 			}
 			monomeLedBuffer[64+(i<<4)+randomizeX] = 15 - (i << 1) - ((randomizeX * 10) >> 4);
 		}
+        if (showRandomized) monomeLedBuffer[64+(randomizeY<<4)+randomizeX] = 15;
 	}
 	else if (gridParam == PRESETS)
 	{
 		monomeLedBuffer[49] = 15;
-		for (u8 i = 0; i < 4; i++)
-			for (u8 led = 0; led < 16; led++)
-				monomeLedBuffer[64+(i<<4)+led] = 0;
+        for (u8 i = 0; i < 8; i++)
+        {
+            monomeLedBuffer[64+(i<<1)] = i == currentPreset ? 13 : (i & 1 ? 10 : 4);
+            monomeLedBuffer[65+(i<<1)] = i == currentPreset ? 13 : (i & 1 ? 10 : 4);
+            monomeLedBuffer[80+(i<<1)] = i == currentPreset ? 13 : (i & 1 ? 10 : 4);
+            monomeLedBuffer[81+(i<<1)] = i == currentPreset ? 13 : (i & 1 ? 10 : 4);
+        }
+        for (u8 i = 0; i < 8; i++)
+        {
+            monomeLedBuffer[96+(i<<1)] = (i+8) == currentPreset ? 13 : (i & 1 ? 4 : 10);
+            monomeLedBuffer[97+(i<<1)] = (i+8) == currentPreset ? 13 : (i & 1 ? 4 : 10);
+            monomeLedBuffer[112+(i<<1)] = (i+8) == currentPreset ? 13 : (i & 1 ? 4 : 10);
+            monomeLedBuffer[113+(i<<1)] = (i+8) == currentPreset ? 13 : (i & 1 ? 4 : 10);
+        }
+        if (showPresetSaved)
+        {
+            u8 i = ((presetToShow >> 3) << 5) + ((presetToShow & 7) << 1);
+            monomeLedBuffer[64+i] = 15;
+            monomeLedBuffer[65+i] = 15;
+            monomeLedBuffer[80+i] = 15;
+            monomeLedBuffer[81+i] = 15;
+        }
 	}
 	else if (gridParam == ROTATESCALE)
 	{
@@ -518,11 +547,8 @@ void redrawGrid(void)
 		current = counter[seq] + (divisor[seq] << 4) - phase[seq];
 		currentOn = (current / divisor[seq]) & 1;
 		
-		// TODO revise this part
-		monomeLedBuffer[14 + seqOffset] = alwaysOnA & (1 << seq) ? 15 : (mixerA & (1 << seq) ? 10 : 4);
-		if (currentOn) monomeLedBuffer[14 + seqOffset] += 3;
-		monomeLedBuffer[15 + seqOffset] = alwaysOnB & (1 << seq) ? 15 : (mixerB & (1 << seq) ? 10 : 4);
-		if (currentOn) monomeLedBuffer[15 + seqOffset] += 3;
+		monomeLedBuffer[14 + seqOffset] = alwaysOnA & (1 << seq) ? 15 : (mixerA & (1 << seq) ? (currentOn ? 12 : 6) : 0);
+		monomeLedBuffer[15 + seqOffset] = alwaysOnB & (1 << seq) ? 15 : (mixerB & (1 << seq) ? (currentOn ? 12 : 6) : 4);
 	}
 	
 	if (valueToShow == 5) // show scale
@@ -603,7 +629,7 @@ void redrawArc(void)
 			for (u8 led = 0; led < 64; led++)
 				monomeLedBuffer[led] = !(led & 3) ? 5 : ((led < ((scale + 1) << 2)) && (led >= (scale << 2)) ? 15 : 0);
 		}
-		if (valueToShow == 0)
+		if (valueToShow == 0 || valueToShow == 6)
 		{
 			if (arc2index)
 			{
@@ -1032,7 +1058,7 @@ static void triggerTimer_callback(void* o) {
 
 static void triggerSettingsTimer_callback(void* o) {
 	timer_remove(&triggerSettingsTimer);
-	showTriggers = 0;
+	showTriggers = showRandomized = showPresetSaved = 0;
 	redraw();
 }
 
@@ -1079,29 +1105,26 @@ static void handler_Front(s32 data) {
 	if(data == 0) {
 		front_timer = 15;
 		
-		if (isArc)
-		{
-			if (monome_encs() == 2) // arc2
-			{
-				arc2index = !arc2index;
-				redraw();
-			}
-			else
-			{
-				if (valueToShow == 6) // double click
-				{
-					reset[0] = reset[1] = reset[2] = reset[3] = 0;
-					globalCounter = counter[0] = counter[1] = counter[2] = counter[3] = 0;
-					updateglobalLength();
-				}
-				else showValue(6);
-			}
-		}
-		else
-		{
-			globalCounter = counter[0] = counter[1] = counter[2] = counter[3] = 0;
-			redraw();
-		}
+        if (valueToShow == 6) // double click
+        {
+            for (u8 i = 0; i < 16; i++)
+            {
+                rotateScale[i] = 0;
+                rotateWeights[i] = 0;
+            }
+            for (u8 i = 0; i < 64; i++) mutateSeq[i] = 0;
+            reset[0] = reset[1] = reset[2] = reset[3] = 0;
+            globalReset = globalCounter = counter[0] = counter[1] = counter[2] = counter[3] = 0;
+            updateglobalLength();
+            redraw();
+        }
+        else
+        {
+            arc2index = !arc2index;
+            showValue(6);
+        }
+        
+        showValue(6);
 	}
 	else {
 		front_timer = 0;
@@ -1319,6 +1342,11 @@ static void handler_MonomeGridKey(s32 data)
 			scalePreviewEnabled = scalePressed = 0;
 		}
 	
+        if (x == 1 && y == 3)
+        {
+            presetPressed = 0;
+        }
+    
 		return;
 	}
 	
@@ -1347,7 +1375,12 @@ static void handler_MonomeGridKey(s32 data)
 		}
 		else if (y == 1) gridParam = SETTINGS;
 		else if (y == 2) gridParam = RANDOMIZE;
-		else if (y == 3) gridParam = PRESETS;
+		else if (y == 3)
+        {
+            gridParam = PRESETS;
+            presetPressed = 1;
+            if (doublePress) flash_write();
+        }
 		
 		redraw();
 		return;
@@ -1510,9 +1543,27 @@ static void handler_MonomeGridKey(s32 data)
 		randomizeX = x;
 		randomizeY = y - 3;
 		generateRandom(randomizeX + 1, randomizeY);
+        showRandomized = 1;
 		redraw();
 		return;
 	}
+    else if (gridParam == PRESETS)
+    {
+        y -= 4;
+        if (presetPressed)
+        {
+            showPresetSaved = 1;
+            presetToShow = ((y >> 1) << 3) + (x >> 1);
+            savePreset(presetToShow);
+        }
+        else
+        {
+            currentPreset = ((y >> 1) << 3) + (x >> 1);
+            loadPreset();
+        }
+        redraw();
+        return;
+    }
 	else if (gridParam == ROTATESCALE)
 	{
 		s8 value = y < 6 ? 6 - y : 5 - y;
@@ -1605,6 +1656,16 @@ void check_events(void) {
 	}
 }
 
+void loadPreset(void)
+{
+    
+}
+
+void savePreset(u8 presetToSave)
+{
+    
+}
+
 // flash commands
 u8 flash_is_fresh(void) {
 	return (flashy.fresh != FIRSTRUN_KEY);
@@ -1662,6 +1723,7 @@ void flash_read(void) {
 
 void initializeValues(void)
 {
+    currentPreset = 0;
 	isDivisorArc = isPhaseArc = isChanceArc = isMixerArc = divisorArc = phaseArc = chanceArc = mixerArc = 0;
 	
 	mixerA = MIXER_PRESETS[0][0];

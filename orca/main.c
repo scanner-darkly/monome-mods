@@ -48,24 +48,24 @@
 #define COUNTERS 12
 
 
-u16 SCALE_PRESETS[16][16] = {
-0, 68, 136, 170, 238, 306, 375, 409, 477, 545, 579, 647, 715, 784, 818,	886, // ionian [2, 2, 1, 2, 2, 2, 1]
-0, 68, 102, 170, 238, 306, 340, 409, 477, 511, 579, 647, 715, 750, 818,	886, // dorian [2, 1, 2, 2, 2, 1, 2]
-0, 34, 102, 170, 238, 272, 340, 409, 443, 511, 579, 647, 681, 750, 818,	852, // phrygian [1, 2, 2, 2, 1, 2, 2]
-0, 68, 136, 204, 238, 306, 375, 409, 477, 545, 613, 647, 715, 784, 818,	886, // lydian [2, 2, 2, 1, 2, 2, 1]
-0, 68, 136, 170, 238, 306, 340, 409, 477, 545, 579, 647, 715, 750, 818,	886, // mixolydian [2, 2, 1, 2, 2, 1, 2]
-0, 68, 136, 170, 238, 306, 340, 409, 477, 545, 579, 647, 715, 750, 818,	886, // aeolian [2, 1, 2, 2, 1, 2, 2]
-0, 34, 102, 170, 204, 272, 340, 409, 443, 511, 579, 613, 681, 750, 818,	852, // locrian [1, 2, 2, 1, 2, 2, 2]
-0, 68, 102, 204, 238, 306, 340, 409, 477, 511, 613, 647, 715, 750, 818, 886, // Ukrainian Dorian
+u8 SCALE_PRESETS[16][16] = {
+    0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 17, 19, 21, 23, 24, 26, // ionian [2, 2, 1, 2, 2, 2, 1]
+    0, 2, 3, 5, 7, 9, 10, 12, 14, 15, 17, 19, 21, 22, 24, 26, // dorian [2, 1, 2, 2, 2, 1, 2]
+    0, 1, 3, 5, 7, 8, 10, 12, 13, 15, 17, 19, 20, 22, 24, 25, // phrygian [1, 2, 2, 2, 1, 2, 2]
+    0, 2, 4, 6, 7, 9, 11, 12, 14, 16, 18, 19, 21, 23, 24, 26, // lydian [2, 2, 2, 1, 2, 2, 1]
+    0, 2, 4, 5, 7, 9, 10, 12, 14, 16, 17, 19, 21, 22, 24, 26, // mixolydian [2, 2, 1, 2, 2, 1, 2]
+    0, 2, 4, 5, 7, 9, 10, 12, 14, 16, 17, 19, 21, 22, 24, 26, // aeolian [2, 1, 2, 2, 1, 2, 2]
+    0, 1, 3, 5, 6, 8, 10, 12, 13, 15, 17, 18, 20, 22, 24, 25, // locrian [1, 2, 2, 1, 2, 2, 2]
+    0, 2, 3, 6, 7, 9, 10, 12, 14, 15, 18, 19, 21, 22, 24, 26, // Ukrainian Dorian
 
-0, 34, 136, 170, 204, 272, 375, 409, 443, 545, 579, 613, 681, 784, 818, 852, // Persian
-306, 375, 409, 511, 545, 579, 647, 715, 784, 818, 920, 954, 988, 1056, 1125, 1193, // Hungarian
-238, 272, 375, 443, 511, 579, 613, 647, 681, 784, 852, 920, 988, 1022, 1056, 1090, // enigmatic
-0, 34, 136, 170, 238, 272, 340, 409, 443, 545, 579, 647, 681, 750, 818, 852, // Phrygian dominant
-0, 34, 136, 204, 272, 340, 409, 443, 545, 613, 681, 750, 818, 852, 954, 1022, // Tritone 
-0, 68, 136, 204, 238, 306, 340, 409, 477, 545, 613, 647, 715, 750, 818, 886, // Acoustic 
-0, 34, 102, 136, 204, 272, 340, 409, 443, 511, 545, 613, 681, 750, 818, 852,  // Altered 
-0, 34, 68, 102, 136, 170, 204, 238, 272, 306, 341, 375, 409, 443, 477, 511	// chromatic
+    0, 1, 4, 5, 6, 8, 11, 12, 13, 16, 17, 18, 20, 23, 24, 25, // Persian
+    9, 11, 12, 15, 16, 17, 19, 21, 23, 24, 27, 28, 29, 31, 33, 35, // Hungarian
+    7, 8, 11, 13, 15, 17, 18, 19, 20, 23, 25, 27, 29, 30, 31, 32, // enigmatic
+    0, 1, 4, 5, 7, 8, 10, 12, 13, 16, 17, 19, 20, 22, 24, 25, // Phrygian dominant
+    0, 1, 4, 6, 8, 10, 12, 13, 16, 18, 20, 22, 24, 25, 28, 30, // Tritone 
+    0, 2, 4, 6, 7, 9, 10, 12, 14, 16, 18, 19, 21, 22, 24, 26, // Acoustic 
+    0, 1, 3, 4, 6, 8, 10, 12, 13, 15, 16, 18, 20, 22, 24, 25,  // Altered 
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 341, 11, 12, 13, 14, 15	// chromatic
 };
 
 const u16 CHROMATIC[36] = {
@@ -182,7 +182,7 @@ u8 randomizeX = 16, randomizeY = 4;
 
 u8 currentPreset;
 u8 scale;
-u16 scales[16][16];
+u8 scales[16][16];
 u8 isDivisorArc, isPhaseArc, isChanceArc, isMixerArc;
 u8 divisorArc, phaseArc, chanceArc, mixerArc;
 u8 divisor[4], phase[4], reset[4], chance[4], weight[4];
@@ -194,7 +194,7 @@ u8 globalReset;
 
 struct preset {
 	u8 scale;
-	u16 scales[16][16];
+	u8 scales[16][16];
 	u8 isDivisorArc, isPhaseArc, isChanceArc, isMixerArc;
 	u8 divisorArc, phaseArc, chanceArc, mixerArc;
 	u8 divisor[4], phase[4], reset[4], chance[4], weight[4];
@@ -243,8 +243,6 @@ void flash_write(void);
 void flash_read(void);
 void initializeValues(void);
 
-u16 indexToNote(u8 index);
-u8 noteToIndex(u16 note);
 void updateglobalLength(void);
 void adjustCounter(u8 index);
 void adjustAllCounters(void);
@@ -266,25 +264,6 @@ static void doublePressTimer_callback(void* o);
 
 ////////////////////////////////////////////////////////////////////////////////
 // application clock code
-
-u16 indexToNote(u8 index)
-{
-	return CHROMATIC[index];
-}
-
-u8 noteToIndex(u16 note)
-{
-	u8 index = 0;
-	for (u8 i = 0; i < 36; i++)
-	{
-		if (CHROMATIC[i] == note)
-		{
-			index = i;
-			break;
-		}
-	}
-	return index;
-}
 
 void redraw(void)
 {
@@ -371,7 +350,7 @@ void redrawGrid(void)
                 }
                 
                 // display current note for the currently selected row
-                noteIndex = noteToIndex(scales[scale][(currentScaleRow << 2) + x]);
+                noteIndex = scales[scale][(currentScaleRow << 2) + x];
                 monomeLedBuffer[68 + (x << 4) + (noteIndex % 12)] = 4 + ((noteIndex / 12) << 2);
             }
             
@@ -395,7 +374,7 @@ void redrawGrid(void)
                 // highlight it in the note space
                 if ((cvA>>2) == currentScaleRow)
                 {
-                    noteIndex = noteToIndex(scales[scale][cvA]) % 12;
+                    noteIndex = scales[scale][cvA] % 12;
                     monomeLedBuffer[68 + ((cvA & 3) << 4) + noteIndex] += 3;
                 }
             }
@@ -708,11 +687,11 @@ void updateOutputs()
 
 	if (gridParam == SCALE && isScalePreview)
 	{
-		gpio_set_gpio_pin(TRIGGERS[0]);
-		gpio_set_gpio_pin(TRIGGERS[1]);
-		gpio_set_gpio_pin(TRIGGERS[2]);
-		gpio_set_gpio_pin(TRIGGERS[3]);
-		cv0 = cv1 = scales[scale][(currentScaleRow<<2)+currentScaleColumn];
+		if (gateMuted[0]) gpio_clr_gpio_pin(TRIGGERS[0]); else gpio_set_gpio_pin(TRIGGERS[0]);
+		if (gateMuted[1]) gpio_clr_gpio_pin(TRIGGERS[1]); else gpio_set_gpio_pin(TRIGGERS[1]);
+		if (gateMuted[2]) gpio_clr_gpio_pin(TRIGGERS[2]); else gpio_set_gpio_pin(TRIGGERS[2]);
+		if (gateMuted[3]) gpio_clr_gpio_pin(TRIGGERS[3]); else gpio_set_gpio_pin(TRIGGERS[3]);
+		cv0 = cv1 = CHROMATIC[scales[scale][(currentScaleRow<<2)+currentScaleColumn]];
 	}
 	else
 	{
@@ -768,8 +747,8 @@ void updateOutputs()
 				gpio_clr_gpio_pin(TRIGGERS[trig]);
 		}
 		
-		cv0 = scales[scale][cvA & 0xf];
-		cv1 = scales[scale][cvB & 0xf];
+		cv0 = CHROMATIC[scales[scale][cvA & 0xf]];
+		cv1 = CHROMATIC[scales[scale][cvB & 0xf]];
 	}
 
 	timer_add(&triggerTimer, 10, &triggerTimer_callback, NULL);
@@ -911,7 +890,7 @@ void clock(u8 phase) {
 		if (!(gridParam == SCALE && isScalePreview) && rotateScale[seq16] < 0)
 		for (s8 j = 0; j < -rotateScale[seq16]; j++)
 		{
-			u16 lastScale = scales[scale][15];
+			u8 lastScale = scales[scale][15];
 			scales[scale][15] = scales[scale][14];
 			scales[scale][14] = scales[scale][13];
 			scales[scale][13] = scales[scale][12];
@@ -933,7 +912,7 @@ void clock(u8 phase) {
 		if (!(gridParam == SCALE && isScalePreview) && rotateScale[seq16] > 0)
 		for (s8 j = 0; j < rotateScale[seq16]; j++)
 		{
-			u16 firstScale = scales[scale][0];
+			u8 firstScale = scales[scale][0];
 			scales[scale][0] = scales[scale][1];
 			scales[scale][1] = scales[scale][2];
 			scales[scale][2] = scales[scale][3];
@@ -1507,7 +1486,7 @@ static void handler_MonomeGridKey(s32 data)
         
         x -= 4;
         currentScaleColumn = y - 4; // yep, y sets column here as the "piano roll" is pivoted
-        u8 noteIndex = noteToIndex(scales[scale][(currentScaleRow<<2)+currentScaleColumn]); // currently selected note
+        u8 noteIndex = scales[scale][(currentScaleRow<<2)+currentScaleColumn]; // currently selected note
         
 		if (noteIndex % 12 == x) // same note
 		{
@@ -1520,7 +1499,7 @@ static void handler_MonomeGridKey(s32 data)
 		}
         prevSelectedScaleColumn = currentScaleColumn;
         
-		scales[scale][(currentScaleRow<<2)+currentScaleColumn] = indexToNote(noteIndex);
+		scales[scale][(currentScaleRow<<2)+currentScaleColumn] = noteIndex;
 		if (isScalePreview) updateOutputs();
 		redraw();
 		return;

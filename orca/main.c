@@ -65,7 +65,7 @@ u8 SCALE_PRESETS[16][16] = {
     0, 1, 4, 6, 8, 10, 12, 13, 16, 18, 20, 22, 24, 25, 28, 30, // Tritone 
     0, 2, 4, 6, 7, 9, 10, 12, 14, 16, 18, 19, 21, 22, 24, 26, // Acoustic 
     0, 1, 3, 4, 6, 8, 10, 12, 13, 15, 16, 18, 20, 22, 24, 25,  // Altered 
-    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 341, 11, 12, 13, 14, 15	// chromatic
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15	// chromatic
 };
 
 const u16 CHROMATIC[36] = {
@@ -180,7 +180,7 @@ u8 scalePressed = 0, presetPressed = 0;
 u8 prevXPressed = 16, prevXReleased = 16, prevYPressed = 8, prevYReleased = 8;
 u8 randomizeX = 16, randomizeY = 4;
 
-u8 currentPreset;
+u8 currentBank, currentPreset;
 u8 scale;
 u8 scales[16][16];
 u8 isDivisorArc, isPhaseArc, isChanceArc, isMixerArc;
@@ -189,7 +189,7 @@ u8 divisor[4], phase[4], reset[4], chance[4], weight[4];
 u8 gateType[4], gateMuted[4], gateLogic[4], gateNot[4], gateTracks[4];
 u8 mixerA, mixerB, alwaysOnA, alwaysOnB;
 s8 rotateScale[16], rotateWeights[16]; 
-u8 mutateSeq[64];
+u8 mutateSeq[8];
 u8 globalReset;
 
 struct preset {
@@ -201,16 +201,17 @@ struct preset {
 	u8 gateType[4], gateMuted[4], gateLogic[4], gateNot[4], gateTracks[4];
 	u8 mixerA, mixerB, alwaysOnA, alwaysOnB;
 	s8 rotateScale[16], rotateWeights[16]; 
-	u8 mutateSeq[64];
+	u8 mutateSeq[8];
 	u8 globalReset;
 };
 
-struct preset presets[16];
+struct preset presets[8][8];
 
 typedef const struct {
 	u8 fresh;
+    u8 currentBank;
 	u8 currentPreset;
-	struct preset presets[16];
+	struct preset presets[8][8];
 } nvram_data_t;
 static nvram_data_t flashy;
 
@@ -246,11 +247,15 @@ void initializeValues(void);
 void updateglobalLength(void);
 void adjustCounter(u8 index);
 void adjustAllCounters(void);
+u8 getMutateSeq(u8 index);
+void setMutateSeq(u8 index);
+void clrMutateSeq(u8 index);
 u8 random8(void);
 void generateRandom(u8 max, u8 paramCount);
 void mutate(void);
 void loadPreset(void);
 void savePreset(u8 presetToSave);
+void saveBank(void);
 
 void redraw(void);
 void redrawArc(void);
@@ -264,6 +269,21 @@ static void doublePressTimer_callback(void* o);
 
 ////////////////////////////////////////////////////////////////////////////////
 // application clock code
+
+u8 getMutateSeq(u8 index)
+{
+    return mutateSeq[index >> 3] & (1 << (index & 7));
+}
+
+void setMutateSeq(u8 index)
+{
+    mutateSeq[index >> 3] |= 1 << (index & 7);
+}
+
+void clrMutateSeq(u8 index)
+{
+    mutateSeq[index >> 3] &= ~(1 << (index & 7));
+}
 
 void redraw(void)
 {
@@ -282,7 +302,7 @@ void redrawGrid(void)
 	seqOffset = globalCounter & 15;
 	monomeLedBuffer[2] = rotateScale[seqOffset] != 0 && showTriggers ? 10 : 5;
 	monomeLedBuffer[18] = rotateWeights[seqOffset] != 0 && showTriggers ? 10 : 5;
-	monomeLedBuffer[34] = mutateSeq[globalCounter & 63] != 0 && showTriggers ? 10 : 5;
+	monomeLedBuffer[34] = getMutateSeq(globalCounter & 63) != 0 && showTriggers ? 10 : 5;
 	monomeLedBuffer[50] = globalReset && !globalCounter && showTriggers ? 10 : 5;
 
     if (gridParam == COUNTERS)
@@ -432,25 +452,32 @@ void redrawGrid(void)
 		monomeLedBuffer[49] = 15;
         for (u8 i = 0; i < 8; i++)
         {
-            monomeLedBuffer[64+(i<<1)] = i == currentPreset ? 0 : (i & 1 ? 8 : 4);
-            monomeLedBuffer[65+(i<<1)] = i == currentPreset ? 14 : (i & 1 ? 8 : 4);
-            monomeLedBuffer[80+(i<<1)] = i == currentPreset ? 14 : (i & 1 ? 8 : 4);
-            monomeLedBuffer[81+(i<<1)] = i == currentPreset ? 14 : (i & 1 ? 8 : 4);
+            monomeLedBuffer[64+(i<<1)] = 0;
+            monomeLedBuffer[65+(i<<1)] = i == currentBank ? 15 : (i & 1 ? 9 : 4);
+            monomeLedBuffer[80+(i<<1)] = i == currentBank ? 15 : (i & 1 ? 9 : 4);
+            monomeLedBuffer[81+(i<<1)] = i == currentBank ? 15 : (i & 1 ? 9 : 4);
         }
         for (u8 i = 0; i < 8; i++)
         {
-            monomeLedBuffer[96+(i<<1)] = (i+8) == currentPreset ? 0 : (i & 1 ? 4 : 8);
-            monomeLedBuffer[97+(i<<1)] = (i+8) == currentPreset ? 14 : (i & 1 ? 4 : 8);
-            monomeLedBuffer[112+(i<<1)] = (i+8) == currentPreset ? 14 : (i & 1 ? 4 : 8);
-            monomeLedBuffer[113+(i<<1)] = (i+8) == currentPreset ? 14 : (i & 1 ? 4 : 8);
+            monomeLedBuffer[96+(i<<1)] = (i+8) == currentPreset ? 13 : (i & 1 ? 4 : 8);
+            monomeLedBuffer[97+(i<<1)] = (i+8) == currentPreset ? 13 : (i & 1 ? 4 : 8);
+            monomeLedBuffer[112+(i<<1)] = (i+8) == currentPreset ? 13 : (i & 1 ? 4 : 8);
+            monomeLedBuffer[113+(i<<1)] = (i+8) == currentPreset ? 13 : (i & 1 ? 4 : 8);
         }
         if (showPresetSaved)
         {
-            u8 i = ((presetToShow >> 3) << 5) + ((presetToShow & 7) << 1);
-            monomeLedBuffer[64+i] = 15;
-            monomeLedBuffer[65+i] = 15;
-            monomeLedBuffer[80+i] = 15;
-            monomeLedBuffer[81+i] = 15;
+            if (presetToShow == 8)
+            {
+                for (u8 i = 0; i < 32; i++) monomeLedBuffer[96+i] = 15;
+            }
+            else
+            {
+                u8 i = ((presetToShow >> 3) << 5) + ((presetToShow & 7) << 1);
+                monomeLedBuffer[64+i] = 15;
+                monomeLedBuffer[65+i] = 15;
+                monomeLedBuffer[80+i] = 15;
+                monomeLedBuffer[81+i] = 15;
+            }    
         }
 	}
 	else if (gridParam == ROTATESCALE)
@@ -489,7 +516,7 @@ void redrawGrid(void)
 		for (u8 i = 0; i < 64; i++)
 		{
 			add = step == i ? 3 : 0;
-			monomeLedBuffer[64 + i] = (mutateSeq[i] ? 12 : 0) + add;
+			monomeLedBuffer[64 + i] = (getMutateSeq(i) ? 12 : 0) + add;
 		}
 	}
 	else if (gridParam == GLOBALRESET)
@@ -951,7 +978,7 @@ void clock(u8 phase) {
 			weight[3] = temp;
 		}
 		
-		if (!(gridParam == SCALE && isScalePreview) && mutateSeq[globalCounter & 63])
+		if (!(gridParam == SCALE && isScalePreview) && getMutateSeq(globalCounter & 63))
 		{
 			mutate();
 			adjustAllCounters();
@@ -1106,7 +1133,7 @@ static void handler_Front(s32 data) {
                 rotateScale[i] = 0;
                 rotateWeights[i] = 0;
             }
-            for (u8 i = 0; i < 64; i++) mutateSeq[i] = 0;
+            for (u8 i = 0; i < 64; i++) clrMutateSeq(i);
             reset[0] = reset[1] = reset[2] = reset[3] = 0;
             globalReset = globalCounter = counter[0] = counter[1] = counter[2] = counter[3] = 0;
             updateglobalLength();
@@ -1400,7 +1427,7 @@ static void handler_MonomeGridKey(s32 data)
 		else if (y == 2) 
 		{
 			gridParam = MUTATESEQ;
-			if (doublePress) for (u8 i = 0; i < 64; i++) mutateSeq[i] = 0;
+			if (doublePress) for (u8 i = 0; i < 64; i++) clrMutateSeq(i);
 		}
 		else if (y == 3)
 		{
@@ -1549,17 +1576,27 @@ static void handler_MonomeGridKey(s32 data)
 	}
     else if (gridParam == PRESETS)
     {
-        y -= 4;
-        if (presetPressed)
+        if (y < 6) // bank selection
         {
-            showPresetSaved = 1;
-            currentPreset = presetToShow = ((y >> 1) << 3) + (x >> 1);
-            savePreset(currentPreset);
+            if (currentBank != x >> 1) currentPreset = 0;
+            currentBank = x >> 1;
+            if (presetPressed)
+            {
+                saveBank();
+                presetToShow = 8;
+                showPresetSaved = 1;
+            }
+            else loadPreset();
         }
-        else
+        else // preset selection
         {
-            currentPreset = ((y >> 1) << 3) + (x >> 1);
-            loadPreset();
+            currentPreset = presetToShow = x >> 1;
+            if (presetPressed)
+            {
+                savePreset(currentPreset);
+                showPresetSaved = 1;
+            }
+            else loadPreset();
         }
         redraw();
         return;
@@ -1581,7 +1618,7 @@ static void handler_MonomeGridKey(s32 data)
 	else if (gridParam == MUTATESEQ)
 	{
 		u8 index = ((y - 4) << 4) + x;
-		mutateSeq[index] = ~mutateSeq[index];
+		if (getMutateSeq(index)) clrMutateSeq(index); else setMutateSeq(index);
 		redraw();
 		return;
 	}
@@ -1658,74 +1695,80 @@ void check_events(void) {
 
 void loadPreset(void)
 {
-	scale = presets[currentPreset].scale;
-	for (u8 j = 0; j < 16; j++) for (u8 k = 0; k < 16; k++) scales[j][k] = presets[currentPreset].scales[j][k];
-	isDivisorArc = presets[currentPreset].isDivisorArc;
-	isPhaseArc = presets[currentPreset].isPhaseArc;
-	isChanceArc = presets[currentPreset].isChanceArc;
-	isMixerArc = presets[currentPreset].isMixerArc;
-	divisorArc = presets[currentPreset].divisorArc;
-	phaseArc = presets[currentPreset].phaseArc;
-	chanceArc = presets[currentPreset].chanceArc;
-	mixerArc = presets[currentPreset].mixerArc;
+	scale = presets[currentBank][currentPreset].scale;
+	for (u8 j = 0; j < 16; j++) for (u8 k = 0; k < 16; k++) scales[j][k] = presets[currentBank][currentPreset].scales[j][k];
+	isDivisorArc = presets[currentBank][currentPreset].isDivisorArc;
+	isPhaseArc = presets[currentBank][currentPreset].isPhaseArc;
+	isChanceArc = presets[currentBank][currentPreset].isChanceArc;
+	isMixerArc = presets[currentBank][currentPreset].isMixerArc;
+	divisorArc = presets[currentBank][currentPreset].divisorArc;
+	phaseArc = presets[currentBank][currentPreset].phaseArc;
+	chanceArc = presets[currentBank][currentPreset].chanceArc;
+	mixerArc = presets[currentBank][currentPreset].mixerArc;
 	for (u8 j = 0; j < 4; j++)
 	{
-		divisor[j] = presets[currentPreset].divisor[j];
-		phase[j] = presets[currentPreset].phase[j];
-		reset[j] = presets[currentPreset].reset[j];
-		chance[j] = presets[currentPreset].chance[j];
-		weight[j] = presets[currentPreset].weight[j];
-		gateType[j] = presets[currentPreset].gateType[j];
-		gateMuted[j] = presets[currentPreset].gateMuted[j];
-		gateLogic[j] = presets[currentPreset].gateLogic[j];
-		gateNot[j] = presets[currentPreset].gateNot[j];
-		gateTracks[j] = presets[currentPreset].gateTracks[j];
+		divisor[j] = presets[currentBank][currentPreset].divisor[j];
+		phase[j] = presets[currentBank][currentPreset].phase[j];
+		reset[j] = presets[currentBank][currentPreset].reset[j];
+		chance[j] = presets[currentBank][currentPreset].chance[j];
+		weight[j] = presets[currentBank][currentPreset].weight[j];
+		gateType[j] = presets[currentBank][currentPreset].gateType[j];
+		gateMuted[j] = presets[currentBank][currentPreset].gateMuted[j];
+		gateLogic[j] = presets[currentBank][currentPreset].gateLogic[j];
+		gateNot[j] = presets[currentBank][currentPreset].gateNot[j];
+		gateTracks[j] = presets[currentBank][currentPreset].gateTracks[j];
 	}
-	mixerA = presets[currentPreset].mixerA;
-	mixerB = presets[currentPreset].mixerB;
-	alwaysOnA = presets[currentPreset].alwaysOnA;
-	alwaysOnB = presets[currentPreset].alwaysOnB;
-	for (u8 k = 0; k < 16; k++) rotateScale[k] = presets[currentPreset].rotateScale[k];
-	for (u8 k = 0; k < 16; k++) rotateWeights[k] = presets[currentPreset].rotateWeights[k];
-	for (u8 k = 0; k < 64; k++) mutateSeq[k] = presets[currentPreset].mutateSeq[k];
-	globalReset = presets[currentPreset].globalReset;
+	mixerA = presets[currentBank][currentPreset].mixerA;
+	mixerB = presets[currentBank][currentPreset].mixerB;
+	alwaysOnA = presets[currentBank][currentPreset].alwaysOnA;
+	alwaysOnB = presets[currentBank][currentPreset].alwaysOnB;
+	for (u8 k = 0; k < 16; k++) rotateScale[k] = presets[currentBank][currentPreset].rotateScale[k];
+	for (u8 k = 0; k < 16; k++) rotateWeights[k] = presets[currentBank][currentPreset].rotateWeights[k];
+	for (u8 k = 0; k < 8; k++) mutateSeq[k] = presets[currentBank][currentPreset].mutateSeq[k];
+	globalReset = presets[currentBank][currentPreset].globalReset;
 	
     adjustAllCounters();
 }
 
 void savePreset(u8 presetToSave)
 {
-	presets[presetToSave].scale = scale;
-	for (u8 j = 0; j < 16; j++) for (u8 k = 0; k < 16; k++) presets[presetToSave].scales[j][k] = scales[j][k];
-	presets[presetToSave].isDivisorArc = isDivisorArc;
-	presets[presetToSave].isPhaseArc = isPhaseArc;
-	presets[presetToSave].isChanceArc = isChanceArc;
-	presets[presetToSave].isMixerArc = isMixerArc;
-	presets[presetToSave].divisorArc = divisorArc;
-	presets[presetToSave].phaseArc = phaseArc;
-	presets[presetToSave].chanceArc = chanceArc;
-	presets[presetToSave].mixerArc = mixerArc;
+	presets[currentBank][presetToSave].scale = scale;
+	for (u8 j = 0; j < 16; j++) for (u8 k = 0; k < 16; k++) presets[currentBank][presetToSave].scales[j][k] = scales[j][k];
+	presets[currentBank][presetToSave].isDivisorArc = isDivisorArc;
+	presets[currentBank][presetToSave].isPhaseArc = isPhaseArc;
+	presets[currentBank][presetToSave].isChanceArc = isChanceArc;
+	presets[currentBank][presetToSave].isMixerArc = isMixerArc;
+	presets[currentBank][presetToSave].divisorArc = divisorArc;
+	presets[currentBank][presetToSave].phaseArc = phaseArc;
+	presets[currentBank][presetToSave].chanceArc = chanceArc;
+	presets[currentBank][presetToSave].mixerArc = mixerArc;
 	for (u8 j = 0; j < 4; j++)
 	{
-		presets[presetToSave].divisor[j] = divisor[j];
-		presets[presetToSave].phase[j] = phase[j];
-		presets[presetToSave].reset[j] = reset[j];
-		presets[presetToSave].chance[j] = chance[j];
-		presets[presetToSave].weight[j] = weight[j];
-		presets[presetToSave].gateType[j] = gateType[j];
-		presets[presetToSave].gateMuted[j] = gateMuted[j];
-		presets[presetToSave].gateLogic[j] = gateLogic[j];
-		presets[presetToSave].gateNot[j] = gateNot[j];
-		presets[presetToSave].gateTracks[j] = gateTracks[j];
+		presets[currentBank][presetToSave].divisor[j] = divisor[j];
+		presets[currentBank][presetToSave].phase[j] = phase[j];
+		presets[currentBank][presetToSave].reset[j] = reset[j];
+		presets[currentBank][presetToSave].chance[j] = chance[j];
+		presets[currentBank][presetToSave].weight[j] = weight[j];
+		presets[currentBank][presetToSave].gateType[j] = gateType[j];
+		presets[currentBank][presetToSave].gateMuted[j] = gateMuted[j];
+		presets[currentBank][presetToSave].gateLogic[j] = gateLogic[j];
+		presets[currentBank][presetToSave].gateNot[j] = gateNot[j];
+		presets[currentBank][presetToSave].gateTracks[j] = gateTracks[j];
 	}
-	presets[presetToSave].mixerA = mixerA;
-	presets[presetToSave].mixerB = mixerB;
-	presets[presetToSave].alwaysOnA = alwaysOnA;
-	presets[presetToSave].alwaysOnB = alwaysOnB;
-	for (u8 k = 0; k < 16; k++) presets[presetToSave].rotateScale[k] = rotateScale[k];
-	for (u8 k = 0; k < 16; k++) presets[presetToSave].rotateWeights[k] = rotateWeights[k];
-	for (u8 k = 0; k < 64; k++) presets[presetToSave].mutateSeq[k] = mutateSeq[k];
-	presets[presetToSave].globalReset = globalReset;
+	presets[currentBank][presetToSave].mixerA = mixerA;
+	presets[currentBank][presetToSave].mixerB = mixerB;
+	presets[currentBank][presetToSave].alwaysOnA = alwaysOnA;
+	presets[currentBank][presetToSave].alwaysOnB = alwaysOnB;
+	for (u8 k = 0; k < 16; k++) presets[currentBank][presetToSave].rotateScale[k] = rotateScale[k];
+	for (u8 k = 0; k < 16; k++) presets[currentBank][presetToSave].rotateWeights[k] = rotateWeights[k];
+	for (u8 k = 0; k < 8; k++) presets[currentBank][presetToSave].mutateSeq[k] = mutateSeq[k];
+	presets[currentBank][presetToSave].globalReset = globalReset;
+}
+
+void saveBank(void)
+{
+    for (u8 i = 0; i < 8; i++)
+        savePreset(i);
 }
 
 // flash commands
@@ -1736,6 +1779,7 @@ u8 flash_is_fresh(void) {
 void flash_write(void)
 {
 	flashc_memset8((void*)&(flashy.fresh), FIRSTRUN_KEY, 4, true);
+	flashc_memset8((void*)&(flashy.currentBank), currentBank, 1, true);
 	flashc_memset8((void*)&(flashy.currentPreset), currentPreset, 1, true);
 	flashc_memcpy((void *)&flashy.presets, &presets, sizeof(presets), true);
 	timer_add(&flashSavedTimer, 140, &flashSavedTimer_callback, NULL);
@@ -1746,40 +1790,41 @@ void flash_write(void)
 void flash_read(void) {
 	initializeValues();
 
+    currentBank = flashy.currentBank;
 	currentPreset = flashy.currentPreset;
-	for (u8 i = 0; i < 16; i++)
+	for (u8 b = 0; b < 8; b++) for (u8 i = 0; i < 8; i++)
 	{
-		presets[i].scale = flashy.presets[i].scale;
-		for (u8 j = 0; j < 16; j++) for (u8 k = 0; k < 16; k++) presets[i].scales[j][k] = flashy.presets[i].scales[j][k];
-		presets[i].isDivisorArc = flashy.presets[i].isDivisorArc;
-		presets[i].isPhaseArc = flashy.presets[i].isPhaseArc;
-		presets[i].isChanceArc = flashy.presets[i].isChanceArc;
-		presets[i].isMixerArc = flashy.presets[i].isMixerArc;
-		presets[i].divisorArc = flashy.presets[i].divisorArc;
-		presets[i].phaseArc = flashy.presets[i].phaseArc;
-		presets[i].chanceArc = flashy.presets[i].chanceArc;
-		presets[i].mixerArc = flashy.presets[i].mixerArc;
+		presets[b][i].scale = flashy.presets[b][i].scale;
+		for (u8 j = 0; j < 16; j++) for (u8 k = 0; k < 16; k++) presets[b][i].scales[j][k] = flashy.presets[b][i].scales[j][k];
+		presets[b][i].isDivisorArc = flashy.presets[b][i].isDivisorArc;
+		presets[b][i].isPhaseArc = flashy.presets[b][i].isPhaseArc;
+		presets[b][i].isChanceArc = flashy.presets[b][i].isChanceArc;
+		presets[b][i].isMixerArc = flashy.presets[b][i].isMixerArc;
+		presets[b][i].divisorArc = flashy.presets[b][i].divisorArc;
+		presets[b][i].phaseArc = flashy.presets[b][i].phaseArc;
+		presets[b][i].chanceArc = flashy.presets[b][i].chanceArc;
+		presets[b][i].mixerArc = flashy.presets[b][i].mixerArc;
 		for (u8 j = 0; j < 4; j++)
 		{
-			presets[i].divisor[j] = flashy.presets[i].divisor[j];
-			presets[i].phase[j] = flashy.presets[i].phase[j];
-			presets[i].reset[j] = flashy.presets[i].reset[j];
-			presets[i].chance[j] = flashy.presets[i].chance[j];
-			presets[i].weight[j] = flashy.presets[i].weight[j];
-			presets[i].gateType[j] = flashy.presets[i].gateType[j];
-			presets[i].gateMuted[j] = flashy.presets[i].gateMuted[j];
-			presets[i].gateLogic[j] = flashy.presets[i].gateLogic[j];
-			presets[i].gateNot[j] = flashy.presets[i].gateNot[j];
-			presets[i].gateTracks[j] = flashy.presets[i].gateTracks[j];
+			presets[b][i].divisor[j] = flashy.presets[b][i].divisor[j];
+			presets[b][i].phase[j] = flashy.presets[b][i].phase[j];
+			presets[b][i].reset[j] = flashy.presets[b][i].reset[j];
+			presets[b][i].chance[j] = flashy.presets[b][i].chance[j];
+			presets[b][i].weight[j] = flashy.presets[b][i].weight[j];
+			presets[b][i].gateType[j] = flashy.presets[b][i].gateType[j];
+			presets[b][i].gateMuted[j] = flashy.presets[b][i].gateMuted[j];
+			presets[b][i].gateLogic[j] = flashy.presets[b][i].gateLogic[j];
+			presets[b][i].gateNot[j] = flashy.presets[b][i].gateNot[j];
+			presets[b][i].gateTracks[j] = flashy.presets[b][i].gateTracks[j];
 		}
-		presets[i].mixerA = flashy.presets[i].mixerA;
-		presets[i].mixerB = flashy.presets[i].mixerB;
-		presets[i].alwaysOnA = flashy.presets[i].alwaysOnA;
-		presets[i].alwaysOnB = flashy.presets[i].alwaysOnB;
-		for (u8 k = 0; k < 16; k++) presets[i].rotateScale[k] = flashy.presets[i].rotateScale[k];
-		for (u8 k = 0; k < 16; k++) presets[i].rotateWeights[k] = flashy.presets[i].rotateWeights[k];
-		for (u8 k = 0; k < 64; k++) presets[i].mutateSeq[k] = flashy.presets[i].mutateSeq[k];
-		presets[i].globalReset = flashy.presets[i].globalReset;
+		presets[b][i].mixerA = flashy.presets[b][i].mixerA;
+		presets[b][i].mixerB = flashy.presets[b][i].mixerB;
+		presets[b][i].alwaysOnA = flashy.presets[b][i].alwaysOnA;
+		presets[b][i].alwaysOnB = flashy.presets[b][i].alwaysOnB;
+		for (u8 k = 0; k < 16; k++) presets[b][i].rotateScale[k] = flashy.presets[b][i].rotateScale[k];
+		for (u8 k = 0; k < 16; k++) presets[b][i].rotateWeights[k] = flashy.presets[b][i].rotateWeights[k];
+		for (u8 k = 0; k < 8; k++) presets[b][i].mutateSeq[k] = flashy.presets[b][i].mutateSeq[k];
+		presets[b][i].globalReset = flashy.presets[b][i].globalReset;
 	}
 	
 	loadPreset();
@@ -1787,41 +1832,41 @@ void flash_read(void) {
 
 void initializeValues(void)
 {
-	currentPreset = 0;
+    currentBank = currentPreset = 0;
 	
-	for (u8 i = 0; i < 16; i++)
+	for (u8 b = 0; b < 8; b++) for (u8 i = 0; i < 8; i++)
 	{
-		presets[i].scale = 0;
-		for (u8 j = 0; j < 16; j++) for (u8 k = 0; k < 16; k++) presets[i].scales[j][k] = SCALE_PRESETS[j][k];
-		presets[i].isDivisorArc = 1;
-		presets[i].isPhaseArc = 1;
-		presets[i].isChanceArc = 1;
-		presets[i].isMixerArc = 1;
-		presets[i].divisorArc = 0;
-		presets[i].phaseArc = 0;
-		presets[i].chanceArc = 0;
-		presets[i].mixerArc = 0;
+		presets[b][i].scale = 0;
+		for (u8 j = 0; j < 16; j++) for (u8 k = 0; k < 16; k++) presets[b][i].scales[j][k] = SCALE_PRESETS[j][k];
+		presets[b][i].isDivisorArc = 1;
+		presets[b][i].isPhaseArc = 1;
+		presets[b][i].isChanceArc = 1;
+		presets[b][i].isMixerArc = 1;
+		presets[b][i].divisorArc = 0;
+		presets[b][i].phaseArc = 0;
+		presets[b][i].chanceArc = 0;
+		presets[b][i].mixerArc = 0;
 		for (u8 j = 0; j < 4; j++)
 		{
-			presets[i].divisor[j] = DIVISOR_PRESETS[0][j];
-			presets[i].phase[j] = PHASE_PRESETS[0][j];
-			presets[i].reset[j] = 0;
-			presets[i].chance[j] = 0;
-			presets[i].weight[j] = 1 << j;
-			presets[i].gateType[j] = 0;
-			presets[i].gateMuted[j] = 0;
-			presets[i].gateLogic[j] = 0;
-			presets[i].gateNot[j] = 0;
-			presets[i].gateTracks[j] = 1 << j;
+			presets[b][i].divisor[j] = DIVISOR_PRESETS[0][j];
+			presets[b][i].phase[j] = PHASE_PRESETS[0][j];
+			presets[b][i].reset[j] = 0;
+			presets[b][i].chance[j] = 0;
+			presets[b][i].weight[j] = 1 << j;
+			presets[b][i].gateType[j] = 0;
+			presets[b][i].gateMuted[j] = 0;
+			presets[b][i].gateLogic[j] = 0;
+			presets[b][i].gateNot[j] = 0;
+			presets[b][i].gateTracks[j] = 1 << j;
 		}
-		presets[i].mixerA = MIXER_PRESETS[0][0];
-		presets[i].mixerB = MIXER_PRESETS[0][1];
-		presets[i].alwaysOnA = 0;
-		presets[i].alwaysOnB = 0;
-		for (u8 k = 0; k < 16; k++) presets[i].rotateScale[k] = 0;
-		for (u8 k = 0; k < 16; k++) presets[i].rotateWeights[k] = 0;
-		for (u8 k = 0; k < 64; k++) presets[i].mutateSeq[k] = 0;
-		presets[i].globalReset = 0;
+		presets[b][i].mixerA = MIXER_PRESETS[0][0];
+		presets[b][i].mixerB = MIXER_PRESETS[0][1];
+		presets[b][i].alwaysOnA = 0;
+		presets[b][i].alwaysOnB = 0;
+		for (u8 k = 0; k < 16; k++) presets[b][i].rotateScale[k] = 0;
+		for (u8 k = 0; k < 16; k++) presets[b][i].rotateWeights[k] = 0;
+		for (u8 k = 0; k < 8; k++) presets[b][i].mutateSeq[k] = 0;
+		presets[b][i].globalReset = 0;
 	}
 	
 	loadPreset();

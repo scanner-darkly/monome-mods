@@ -257,13 +257,16 @@ u8 getMutateSeq(u8 index);
 void setMutateSeq(u8 index);
 void clrMutateSeq(u8 index);
 u8 random8(void);
+void generateChaos(void);
 void generateRandom(u8 max, u8 paramCount);
 void mutate(void);
+void rotateScales(s8 amount);
 void loadPreset(u8 b, u8 p);
 void loadBank(u8 b, u8 updatecp);
 void copyBank(u8 source, u8 dest);
 void copyPreset(u8 source, u8 dest);
 void updatePresetCache(void);
+u8 isTrackDead(u8 divisor, u8 phase, u8 reset, u8 globalReset);
 
 void redraw(void);
 void redrawArc(void);
@@ -449,15 +452,24 @@ void redrawGrid(void)
 	else if (gridParam == RANDOMIZE)
 	{
 		monomeLedBuffer[33] = 15;
-		for (u8 i = 0; i < 4; i++)
+		
+		if (showRandomized == 2) // chaos
 		{
-			for (u8 led = 0; led < 16; led++)
-			{
-				monomeLedBuffer[64+(i<<4)+led] = showRandomized && (i == randomizeY) ? 0 : ((i << 1) + ((led * 10) >> 4));
-			}
-			if (showRandomized) monomeLedBuffer[64+(i<<4)+randomizeX] = 0;
+			for (u8 led = 0; led < 64; led++)
+				monomeLedBuffer[64+led] = random8() & 15;
 		}
-        if (showRandomized) monomeLedBuffer[64+(randomizeY<<4)+randomizeX] = 15;
+		else
+		{
+			for (u8 i = 0; i < 4; i++)
+			{
+				for (u8 led = 0; led < 16; led++)
+				{
+					monomeLedBuffer[64+(i<<4)+led] = showRandomized && (i == randomizeY) ? 0 : ((i << 1) + ((led * 10) >> 4));
+				}
+				if (showRandomized) monomeLedBuffer[64+(i<<4)+randomizeX] = 0;
+			}
+			if (showRandomized) monomeLedBuffer[64+(randomizeY<<4)+randomizeX] = 15;
+		}
 	}
 	else if (gridParam == PRESETS)
 	{
@@ -817,65 +829,192 @@ u8 random8(void)
 	return (u8)((rnd() ^ adc[1]) & 0xff);
 }
 
+u8 isTrackDead(u8 divisor, u8 phase, u8 reset, u8 globalReset)
+{
+	u8 res = min(reset, globalReset);
+	if (!res) res = max(reset, globalReset);
+	if (!res) return 0;
+
+	u8 prevValue = (((divisor << 6) - phase) / divisor) & 1, value, dead = 1;
+	
+	for (u8 i = 1; i < res; i++)
+	{
+		value = (((divisor << 6) - phase + i) / divisor) & 1;
+		if (value != prevValue)
+		{
+			dead = 0;
+			break;
+		}
+		prevValue = value;
+	}
+		
+	return dead;
+}
+
+void generateChaos(void)
+{
+	for (u8 i = 0; i < 4; i++)
+	{
+		for (u8 j = 0; j < 16; j++) banks[cb].presets[banks[cb].cp].scales[banks[cb].presets[banks[cb].cp].scale][j] = random8() % 36;
+		banks[cb].presets[banks[cb].cp].divisor[i] = (random8() & 15) + 1;
+		banks[cb].presets[banks[cb].cp].phase[i] = random8() % 16;
+		banks[cb].presets[banks[cb].cp].reset[i] = random8() % 16;
+		banks[cb].presets[banks[cb].cp].weight[i] = (random8() & 7) + 1;
+		banks[cb].presets[banks[cb].cp].gateType[i] = random8() % 3;
+		banks[cb].presets[banks[cb].cp].gateLogic[i] = random8() & 1;
+		banks[cb].presets[banks[cb].cp].gateNot[i] = random8() & 1;
+		banks[cb].presets[banks[cb].cp].gateTracks[i] = random8() & 15;
+	}
+	banks[cb].presets[banks[cb].cp].mixerA = random8() & 15;
+	banks[cb].presets[banks[cb].cp].mixerB = random8() & 15;
+	banks[cb].presets[banks[cb].cp].alwaysOnA = random8() & 15;
+	banks[cb].presets[banks[cb].cp].alwaysOnB = random8() & 15;
+	updatePresetCache();
+}
+
 void generateRandom(u8 max, u8 paramCount)
 {
-	// max is expected to be 1-16
-	for (u8 i = 0; i < paramCount; i++)
+	for (u8 t = 0; t < 40; t++)
 	{
 		u8 index = random8() & 3;
-		switch (random8() % 3)
+		u8 div = divisor[index], ph = phase[index], res = reset[index];
+		for (u8 i = 0; i < paramCount; i++)
+			switch (random8() % 3)
+			{
+				case 0:
+					div = (random8() % max) + 1;
+					break;
+				case 1:
+					ph = random8() % (max + 1);
+					break;
+				case 2:
+					res = random8() > 128 ? 0 : random8() % (max + 1);
+					break;
+			}
+		if (!isTrackDead(div, ph, res, globalReset))
 		{
-			case 0:
-				banks[cb].presets[banks[cb].cp].divisor[index] = divisor[index] = (random8() % max) + 1;
-				break;
-			case 1:
-				banks[cb].presets[banks[cb].cp].phase[index] = phase[index] = random8() % (max + 1);
-				break;
-			case 2:
-				banks[cb].presets[banks[cb].cp].reset[index] = reset[index] = random8() % (max + 1);
-				break;
+			banks[cb].presets[banks[cb].cp].divisor[index] = divisor[index] = div;
+			banks[cb].presets[banks[cb].cp].phase[index] = phase[index] = ph;
+			banks[cb].presets[banks[cb].cp].reset[index] = reset[index] = res;
+			break;
 		}
 	}
+	
+	if (paramCount > 2)
+	{
+		for (u8 i = 0; i < 4; i++)
+			banks[cb].presets[banks[cb].cp].weight[i] = weight[i] = (random8() & 7) + 1;
+	}
+
+	if (paramCount > 3)
+		rotateScales(random8() % max);
 }
 
 void mutate(void)
 {
-	u8 index = random8() & 3;
-	switch (random8() % 3)
+	for (u8 i = 0; i < 40; i++)
 	{
-		case 0:
-			if (random8() & 1)
-			{
-				if (divisor[index] > 1) divisor[index]--;
-			}
-			else
-			{
-				if (divisor[index] < 16) divisor[index]++;
-			}
-			banks[cb].presets[banks[cb].cp].divisor[index] = divisor[index];
+		u8 index = random8() & 3;
+		u8 div = divisor[index], ph = phase[index], res = reset[index];
+		
+		switch (random8() % 3)
+		{
+			case 0:
+				div = divisor[index];
+				if (random8() & 1)
+				{
+					if (div > 1) div--;
+				}
+				else
+				{
+					if (div < 16) div++;
+				}
+				break;
+			case 1:
+				ph = phase[index];
+				if (random8() & 1)
+				{
+					if (ph > 0) ph--;
+				}
+				else
+				{
+					if (ph < 16) ph++;
+				}
+				break;
+			case 2:
+				res = reset[index];
+				if (random8() & 1)
+				{
+					if (res > 0) res--;
+				}
+				else
+				{
+					if (res < 16) res++;
+				}
+				break;
+		}
+		
+		if (!isTrackDead(div, ph, res, globalReset))
+		{
+			banks[cb].presets[banks[cb].cp].divisor[index] = divisor[index] = div;
+			banks[cb].presets[banks[cb].cp].phase[index] = phase[index] = ph;
+			banks[cb].presets[banks[cb].cp].reset[index] = reset[index] = res;
 			break;
-		case 1:
-			if (random8() & 1)
-			{
-				if (phase[index] > 0) phase[index]--;
-			}
-			else
-			{
-				if (phase[index] < 16) phase[index]++;
-			}
-			banks[cb].presets[banks[cb].cp].phase[index] = phase[index];
-			break;
-		case 2:
-			if (random8() & 1)
-			{
-				if (reset[index] > 0) reset[index]--;
-			}
-			else
-			{
-				if (reset[index] < 16) reset[index]++;
-			}
-			banks[cb].presets[banks[cb].cp].reset[index] = reset[index];
-			break;
+		}
+	}
+}
+
+void rotateScales(s8 amount)
+{
+	if (amount < 0)
+	{
+		for (s8 j = 0; j < -amount; j++)
+		{
+			u8 lastScale = scales[scale][15];
+			scales[scale][15] = scales[scale][14];
+			scales[scale][14] = scales[scale][13];
+			scales[scale][13] = scales[scale][12];
+			scales[scale][12] = scales[scale][11];
+			scales[scale][11] = scales[scale][10];
+			scales[scale][10] = scales[scale][9];
+			scales[scale][9] = scales[scale][8];
+			scales[scale][8] = scales[scale][7];
+			scales[scale][7] = scales[scale][6];
+			scales[scale][6] = scales[scale][5];
+			scales[scale][5] = scales[scale][4];
+			scales[scale][4] = scales[scale][3];
+			scales[scale][3] = scales[scale][2];
+			scales[scale][2] = scales[scale][1];
+			scales[scale][1] = scales[scale][0];
+			scales[scale][0] = lastScale;
+		}
+		for (u8 i = 0; i < 8; i++) for (u8 j = 0; j < 8; j++)
+			banks[cb].presets[banks[cb].cp].scales[i][j] = scales[i][j];
+	} 
+	else
+	{
+		for (s8 j = 0; j < amount; j++)
+		{
+			u8 firstScale = scales[scale][0];
+			scales[scale][0] = scales[scale][1];
+			scales[scale][1] = scales[scale][2];
+			scales[scale][2] = scales[scale][3];
+			scales[scale][3] = scales[scale][4];
+			scales[scale][4] = scales[scale][5];
+			scales[scale][5] = scales[scale][6];
+			scales[scale][6] = scales[scale][7];
+			scales[scale][7] = scales[scale][8];
+			scales[scale][8] = scales[scale][9];
+			scales[scale][9] = scales[scale][10];
+			scales[scale][10] = scales[scale][11];
+			scales[scale][11] = scales[scale][12];
+			scales[scale][12] = scales[scale][13];
+			scales[scale][13] = scales[scale][14];
+			scales[scale][14] = scales[scale][15];
+			scales[scale][15] = firstScale;
+		}
+		for (u8 i = 0; i < 8; i++) for (u8 j = 0; j < 8; j++)
+			banks[cb].presets[banks[cb].cp].scales[i][j] = scales[i][j];
 	}
 }
 
@@ -933,57 +1072,8 @@ void clock(u8 phase) {
 		
 		seq16 = globalCounter & 15;
 		
-		if (!(gridParam == SCALE && isScalePreview) && rotateScale[seq16] < 0)
-		{
-			for (s8 j = 0; j < -rotateScale[seq16]; j++)
-			{
-				u8 lastScale = scales[scale][15];
-				scales[scale][15] = scales[scale][14];
-				scales[scale][14] = scales[scale][13];
-				scales[scale][13] = scales[scale][12];
-				scales[scale][12] = scales[scale][11];
-				scales[scale][11] = scales[scale][10];
-				scales[scale][10] = scales[scale][9];
-				scales[scale][9] = scales[scale][8];
-				scales[scale][8] = scales[scale][7];
-				scales[scale][7] = scales[scale][6];
-				scales[scale][6] = scales[scale][5];
-				scales[scale][5] = scales[scale][4];
-				scales[scale][4] = scales[scale][3];
-				scales[scale][3] = scales[scale][2];
-				scales[scale][2] = scales[scale][1];
-				scales[scale][1] = scales[scale][0];
-				scales[scale][0] = lastScale;
-			}
-			for (u8 i = 0; i < 8; i++) for (u8 j = 0; j < 8; j++)
-				banks[cb].presets[banks[cb].cp].scales[i][j] = scales[i][j];
-		}
-		
-		if (!(gridParam == SCALE && isScalePreview) && rotateScale[seq16] > 0)
-		{
-			for (s8 j = 0; j < rotateScale[seq16]; j++)
-			{
-				u8 firstScale = scales[scale][0];
-				scales[scale][0] = scales[scale][1];
-				scales[scale][1] = scales[scale][2];
-				scales[scale][2] = scales[scale][3];
-				scales[scale][3] = scales[scale][4];
-				scales[scale][4] = scales[scale][5];
-				scales[scale][5] = scales[scale][6];
-				scales[scale][6] = scales[scale][7];
-				scales[scale][7] = scales[scale][8];
-				scales[scale][8] = scales[scale][9];
-				scales[scale][9] = scales[scale][10];
-				scales[scale][10] = scales[scale][11];
-				scales[scale][11] = scales[scale][12];
-				scales[scale][12] = scales[scale][13];
-				scales[scale][13] = scales[scale][14];
-				scales[scale][14] = scales[scale][15];
-				scales[scale][15] = firstScale;
-			}
-			for (u8 i = 0; i < 8; i++) for (u8 j = 0; j < 8; j++)
-				banks[cb].presets[banks[cb].cp].scales[i][j] = scales[i][j];
-		}
+		if (!(gridParam == SCALE && isScalePreview))
+			rotateScales(rotateScale[seq16]);
 
 		if (!(gridParam == SCALE && isScalePreview) && rotateWeights[seq16] < 0)
 		{
@@ -1457,7 +1547,16 @@ static void handler_MonomeGridKey(s32 data)
 			scalePressed = 1;
 		}
 		else if (y == 1) gridParam = SETTINGS;
-		else if (y == 2) gridParam = RANDOMIZE;
+		else if (y == 2)
+		{
+			gridParam = RANDOMIZE;
+			if (doublePress)
+			{
+				generateChaos();
+				showRandomized = 2;
+			}
+			adjustAllCounters();
+		}
 		else if (y == 3)
         {
             gridParam = PRESETS;
@@ -1631,8 +1730,8 @@ static void handler_MonomeGridKey(s32 data)
 		randomizeX = x;
 		randomizeY = y - 4;
 		generateRandom(randomizeX + 1, randomizeY + 1);
+		showRandomized = 1;
 		adjustAllCounters();
-        showRandomized = 1;
 		redraw();
 		return;
 	}

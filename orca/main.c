@@ -27,7 +27,7 @@
 #include "conf_board.h"
 
 	
-#define FIRSTRUN_KEY 0x50
+#define FIRSTRUN_KEY 0x51
 #define ENCODER_DELTA_SENSITIVITY 40
 
 #define DIVISOR 0
@@ -159,8 +159,9 @@ u16 adc[4];
 u8 front_timer;
 u16 cv0, cv1;
 
-u16 encoderDelta[4] = {0, 0, 0, 0};
+s16 encoderDelta[4] = {0, 0, 0, 0};
 u8 valueToShow = 0;
+u8 frontClicked = 0;
 u8 prevPotValue = 16;
 
 u8 isScalePreview = 0;
@@ -170,7 +171,8 @@ u8 prevSelectedScaleColumn = 4;
 u8 currentScaleRow = 0, currentScaleColumn = 0;
 // u8 debug1, debug2 = 0;
 
-u8 arc2index = 0; // 0 - show rings 1&2, 1 - show rings 3&4
+u8 arc2index = 0; // 0 - show tracks 1&2, 1 - show tracks 3&4
+u8 arc4index = 0; // 0 - show tracks, 1 - show values
 u8 isArc;
 u8 gridParam = 0;
 u64 globalCounter = 0, globalLength;
@@ -672,15 +674,16 @@ void redrawArc(void)
 		}
 		if (valueToShow == 4) // preset 0-7
 		{
+			u8 pres = (cb << 3) + banks[cb].cp;
 			for (u8 led = 0; led < 64; led++)
-				monomeLedBuffer[led + 64] = !(led & 7) ? 5 : ((led < ((banks[cb].cp + 1) << 3)) && (led >= (banks[cb].cp << 3)) ? 15 : 0);
+				monomeLedBuffer[led + 64] = led == pres ? 15 : (led & 7 ? 1 : 6);
 		}
 		if (valueToShow == 5) // scale 0-15
 		{
 			for (u8 led = 0; led < 64; led++)
 				monomeLedBuffer[led] = !(led & 3) ? 5 : ((led < ((scale + 1) << 2)) && (led >= (scale << 2)) ? 15 : 0);
 		}
-		if (valueToShow == 0 || valueToShow == 6)
+		if (valueToShow == 0)
 		{
 			if (arc2index)
 			{
@@ -699,28 +702,29 @@ void redrawArc(void)
 	}
 	else
 	{
-		if (valueToShow == 1 || valueToShow == 6) // divisorArc 0-15
+		if (valueToShow == 1 || arc4index) // divisorArc 0-15
 		{
 			level = isDivisorArc ? 15 : 0;
 			for (u8 led = 0; led < 64; led++)
 				monomeLedBuffer[led] = !(led & 3) ? 5 : ((led < ((divisorArc + 1) << 2)) && (led >= (divisorArc << 2)) ? level : 0);
 		}
-		if (valueToShow == 2 || valueToShow == 6) // phaseArc 0-15
+		if (valueToShow == 2 || arc4index) // phaseArc 0-15
 		{
 			level = isPhaseArc ? 15 : 0;
 			for (u8 led = 0; led < 64; led++)
 				monomeLedBuffer[led + 64] = !(led & 3) ? 5 : ((led < ((phaseArc + 1) << 2)) && (led >= (phaseArc << 2)) ? level : 0);
 		}
-		if (valueToShow == 3 || valueToShow == 6) // mixerArc 0-15
+		if (valueToShow == 3 || arc4index) // mixerArc 0-15
 		{
 			level = isMixerArc ? 15 : 0;
 			for (u8 led = 0; led < 64; led++)
 				monomeLedBuffer[led + 128] = !(led & 3) ? 5 : ((led < ((mixerArc + 1) << 2)) && (led >= (mixerArc << 2)) ? level : 0);
 		}
-		if (valueToShow == 4 || valueToShow == 6) // preset 0-7
+		if (valueToShow == 4 || arc4index) // preset 0-7
 		{
+			u8 pres = (cb << 3) + banks[cb].cp;
 			for (u8 led = 0; led < 64; led++)
-				monomeLedBuffer[led + 192] = !(led & 7) ? 5 : ((led < ((banks[cb].cp + 1) << 3)) && (led >= (banks[cb].cp << 3)) ? 15 : 0);
+				monomeLedBuffer[led + 192] = led == pres ? 15 : (led & 7 ? 1 : 6);
 		}
 		if (valueToShow == 5) // scale 0-15
 		{
@@ -1180,20 +1184,6 @@ void timers_unset_monome(void) {
 	timer_remove( &monomeRefreshTimer ); 
 }
 
-static void showValueTimer_callback(void* o) {
-	valueToShow = 0;
-	timer_remove(&showValueTimer);
-	redraw();
-}
-
-void showValue(u8 value)
-{
-	if (valueToShow) timer_remove(&showValueTimer);
-	valueToShow = value;
-	timer_add(&showValueTimer, 1000, &showValueTimer_callback, NULL);
-	redraw();
-}
-
 static void triggerTimer_callback(void* o) {
 	timer_remove(&triggerTimer);
 	for (u8 trig = 0; trig < 4; trig++)
@@ -1261,11 +1251,34 @@ static void handler_MonomeRefresh(s32 data) {
 	}
 }
 
+static void showValueTimer_callback(void* o) {
+	valueToShow = 0;
+	frontClicked = 0;
+	timer_remove(&showValueTimer);
+	redraw();
+}
+
+void showValue(u8 value)
+{
+	timer_remove(&showValueTimer);
+	valueToShow = value;
+	timer_add(&showValueTimer, 1000, &showValueTimer_callback, NULL);
+	redraw();
+}
+
 static void handler_Front(s32 data) {
 	if(data == 0) {
 		front_timer = 15;
 		
-        if (valueToShow == 6) // double click
+		if (isArc)
+		{
+			if (monome_encs() == 2)
+				arc2index = !arc2index;
+			else
+				arc4index = !arc4index;
+		}
+		
+        if (frontClicked) // double click
         {
             for (u8 i = 0; i < 16; i++)
             {
@@ -1276,16 +1289,15 @@ static void handler_Front(s32 data) {
             for (u8 i = 0; i < 4; i++) banks[cb].presets[banks[cb].cp].chance[i] = chance[i] = banks[cb].presets[banks[cb].cp].reset[i] = reset[i] = 0;
             banks[cb].presets[banks[cb].cp].globalReset = globalReset = globalCounter = counter[0] = counter[1] = counter[2] = counter[3] = 0;
             updateglobalLength();
+			frontClicked = 0;
             redraw();
         }
         else
         {
-            arc2index = !arc2index;
+			frontClicked = 1;
 			if (!isArc) gridParam = COUNTERS;
-            showValue(6);
+            showValue(0);
         }
-        
-        showValue(6);
 	}
 	else {
 		front_timer = 0;
@@ -1348,8 +1360,16 @@ static void handler_MonomeRingEnc(s32 data) {
 	s8 delta;
 	monome_ring_enc_parse_event_data(data, &n, &delta);
 	
-	encoderDelta[n] += abs(delta);
-	if (encoderDelta[n] < ENCODER_DELTA_SENSITIVITY)
+	if (delta > 0)
+	{
+		if (encoderDelta[n] > 0) encoderDelta[n] += delta; else encoderDelta[n] = delta;
+	}
+	else
+	{
+		if (encoderDelta[n] < 0) encoderDelta[n] += delta; else encoderDelta[n] = delta;
+	}
+	
+	if (abs(encoderDelta[n]) < ENCODER_DELTA_SENSITIVITY)
 		return;
 	
 	encoderDelta[n] = 0;
@@ -1403,7 +1423,13 @@ static void handler_MonomeRingEnc(s32 data) {
 				}
 				else
 				{
-					if (++banks[cb].cp > 8) banks[cb].cp = 0;
+					if (banks[cb].cp < 7)
+						banks[cb].cp++;
+					else
+					{
+						if (++cb > 7) cb = 0;
+						banks[cb].cp = 0;
+					}
 					updatePresetCache();
 					showValue(4);
 				}
@@ -1474,11 +1500,23 @@ static void handler_MonomeRingEnc(s32 data) {
 			case 3:
 				if (delta > 0)
 				{
-					if (++banks[cb].cp > 8) banks[cb].cp = 0;
+					if (banks[cb].cp < 7)
+						banks[cb].cp++;
+					else
+					{
+						if (++cb > 7) cb = 0;
+						banks[cb].cp = 0;
+					}
 				}
 				else
 				{
-					if (banks[cb].cp > 0) banks[cb].cp--; else banks[cb].cp = 7;
+					if (banks[cb].cp > 0)
+						banks[cb].cp--;
+					else
+					{
+						if (cb > 0) cb--; else cb = 7;
+						banks[cb].cp = 7;
+					}
 				}			
 				updatePresetCache();
 				showValue(4);
@@ -1694,7 +1732,7 @@ static void handler_MonomeGridKey(s32 data)
 	{
 		if (x == 0)
 		{
-			banks[cb].presets[banks[cb].cp].gateMuted[y - 4] = gateMuted[y - 4] = ~gateMuted[y - 4];
+			banks[cb].presets[banks[cb].cp].gateMuted[y - 4] = gateMuted[y - 4] = !gateMuted[y - 4];
 		}
 		else if (x == 1)
 		{
@@ -1703,11 +1741,11 @@ static void handler_MonomeGridKey(s32 data)
 		}
 		else if (x == 2)
 		{
-			banks[cb].presets[banks[cb].cp].gateLogic[y - 4] = gateLogic[y - 4] = ~gateLogic[y - 4];
+			banks[cb].presets[banks[cb].cp].gateLogic[y - 4] = gateLogic[y - 4] = !gateLogic[y - 4];
 		}
 		else if (x == 3)
 		{
-			banks[cb].presets[banks[cb].cp].gateNot[y - 4] = gateNot[y - 4] = ~gateNot[y - 4];
+			banks[cb].presets[banks[cb].cp].gateNot[y - 4] = gateNot[y - 4] = !gateNot[y - 4];
 		}
 		else if (x < 8)
 		{
@@ -2061,12 +2099,12 @@ void initializeValues(void)
 			banks[b].presets[i].isDivisorArc = 1;
 			banks[b].presets[i].isPhaseArc = 1;
 			banks[b].presets[i].isMixerArc = 1;
-			banks[b].presets[i].divisorArc = 0;
-			banks[b].presets[i].phaseArc = 0;
-			banks[b].presets[i].mixerArc = 0;
 			randDiv = random8() & 15;
 			randPh = random8() & 15;
 			randMix = random8() & 15;
+			banks[b].presets[i].divisorArc = randDiv;
+			banks[b].presets[i].phaseArc = randPh;
+			banks[b].presets[i].mixerArc = randMix;
 			for (u8 j = 0; j < 4; j++)
 			{
 				banks[b].presets[i].divisor[j] = DIVISOR_PRESETS[randDiv][j];

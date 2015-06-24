@@ -40,7 +40,7 @@
 THIS = arc_ww_init
 
 # Path to top level ASF directory relative to this project directory.
-PRJ_PATH = ../xdk-asf-3.17.0
+PRJ_PATH = ../../mod/xdk-asf-3.17.0
 
 # Target CPU architecture: ap, ucr1, ucr2 or ucr3
 ARCH = ucr1
@@ -62,19 +62,19 @@ TARGET = $(THIS).elf
 
 # List of C source files.
 CSRCS = \
-       ../$(THIS)/main.c    \
-       ../../mod/skeleton/adc.c     \
-       ../../mod/skeleton/events.c     \
-       ../../mod/skeleton/init.c \
-       ../../mod/skeleton/interrupts.c \
-       ../../mod/skeleton/monome.c \
-       ../../mod/skeleton/timers.c \
-       ../../mod/skeleton/usb.c \
-       ../../mod/skeleton/util.c \
-       ../../mod/skeleton/usb/ftdi/ftdi.c \
-       ../../mod/skeleton/usb/ftdi/uhi_ftdi.c \
-       ../../mod/skeleton/usb/hid/hid.c \
-       ../../mod/skeleton/usb/hid/uhi_hid.c \
+       ../../monome-mods/$(THIS)/main.c    \
+       ../skeleton/adc.c     \
+       ../skeleton/events.c     \
+       ../skeleton/init.c \
+       ../skeleton/interrupts.c \
+       ../skeleton/monome.c \
+       ../skeleton/timers.c \
+       ../skeleton/usb.c \
+       ../skeleton/util.c \
+       ../skeleton/usb/ftdi/ftdi.c \
+       ../skeleton/usb/ftdi/uhi_ftdi.c \
+       ../skeleton/usb/hid/hid.c \
+       ../skeleton/usb/hid/uhi_hid.c \
        avr32/drivers/adc/adc.c                            \
        avr32/drivers/flashc/flashc.c                      \
        avr32/drivers/gpio/gpio.c                          \
@@ -99,12 +99,12 @@ ASSRCS = \
 
 # List of include paths.
 INC_PATH = \
-       ../$(THIS)           \
-       ../../mod/skeleton                                        \
-       ../../mod/skeleton/conf      \
-       ../../mod/skeleton/usb \
-       ../../mod/skeleton/usb/ftdi \
-       ../../mod/skeleton/usb/hid \
+       ../../monome-mods/$(THIS)           \
+       ../skeleton                                        \
+       ../skeleton/conf      \
+       ../skeleton/usb \
+       ../skeleton/usb/ftdi \
+       ../skeleton/usb/hid \
        avr32/boards                                       \
        avr32/drivers/cpu/cycle_counter                    \
        avr32/drivers/flashc                               \
@@ -113,6 +113,7 @@ INC_PATH = \
        avr32/drivers/pm                                   \
        avr32/drivers/spi                                  \
        avr32/drivers/tc                                   \
+       avr32/drivers/twi                                  \
        avr32/drivers/usart                                \
        avr32/drivers/usbb                                 \
        avr32/utils                                        \

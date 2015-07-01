@@ -63,18 +63,18 @@ TARGET = $(THIS).elf
 # List of C source files.
 CSRCS = \
        ../../monome-mods/$(THIS)/main.c    \
-       ../skeleton/adc.c     \
-       ../skeleton/events.c     \
-       ../skeleton/init.c \
-       ../skeleton/interrupts.c \
-       ../skeleton/monome.c \
-       ../skeleton/timers.c \
-       ../skeleton/usb.c \
-       ../skeleton/util.c \
-       ../skeleton/usb/ftdi/ftdi.c \
-       ../skeleton/usb/ftdi/uhi_ftdi.c \
-       ../skeleton/usb/hid/hid.c \
-       ../skeleton/usb/hid/uhi_hid.c \
+       ../../mod/skeleton/adc.c     \
+       ../../mod/skeleton/events.c     \
+       ../../mod/skeleton/init.c \
+       ../../mod/skeleton/interrupts.c \
+       ../../mod/skeleton/monome.c \
+       ../../mod/skeleton/timers.c \
+       ../../mod/skeleton/usb.c \
+       ../../mod/skeleton/util.c \
+       ../../mod/skeleton/usb/ftdi/ftdi.c \
+       ../../mod/skeleton/usb/ftdi/uhi_ftdi.c \
+       ../../mod/skeleton/usb/hid/hid.c \
+       ../../mod/skeleton/usb/hid/uhi_hid.c \
        avr32/drivers/adc/adc.c                            \
        avr32/drivers/flashc/flashc.c                      \
        avr32/drivers/gpio/gpio.c                          \

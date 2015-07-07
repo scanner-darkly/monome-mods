@@ -15,6 +15,7 @@
 // skeleton
 #include "types.h"
 #include "events.h"
+#include "i2c.h"
 #include "init.h"
 #include "interrupts.h"
 #include "monome.h"
@@ -25,6 +26,7 @@
 
 // this
 #include "conf_board.h"
+#include "ii.h"
 
 	
 #define FIRSTRUN_KEY 0x51
@@ -245,6 +247,7 @@ static void handler_None(s32 data) { ;; }
 static void handler_KeyTimer(s32 data);
 static void handler_Front(s32 data);
 static void handler_ClockNormal(s32 data);
+static void orca_process_ii(uint8_t i, int d);
 
 u8 flash_is_fresh(void);
 void flash_unfresh(void);
@@ -1352,6 +1355,19 @@ static void handler_ClockNormal(s32 data) {
 }
 
 
+static void orca_process_ii(uint8_t i, int d)
+{
+	switch(i)
+	{
+		case WW_PRESET:
+			banks[cb].cp = (u8)d;
+			updatePresetCache();
+			break;
+		default:
+			break;
+	}
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // application arc/grid code
 
@@ -2155,12 +2171,14 @@ int main(void)
 
 	init_usb_host();
 	init_monome();
+	init_i2c_slave(0x10);
 
 	if (flash_is_fresh())
 		initializeValues();
 	else 
 		flash_read();
 
+	process_ii = &orca_process_ii;
 	clock_pulse = &clock;
 	clock_external = !gpio_get_pin_value(B09);
 

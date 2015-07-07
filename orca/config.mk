@@ -65,6 +65,7 @@ CSRCS = \
        ../../monome-mods/$(THIS)/main.c    \
        ../../mod/skeleton/adc.c     \
        ../../mod/skeleton/events.c     \
+       ../../mod/skeleton/i2c.c     \
        ../../mod/skeleton/init.c \
        ../../mod/skeleton/interrupts.c \
        ../../mod/skeleton/monome.c \
@@ -84,6 +85,7 @@ CSRCS = \
        avr32/drivers/pm/power_clocks_lib.c                \
        avr32/drivers/spi/spi.c                            \
        avr32/drivers/tc/tc.c                              \
+       avr32/drivers/twi/twi.c                              \
        avr32/drivers/usart/usart.c                        \
        avr32/drivers/usbb/usbb_host.c                     \
        avr32/utils/debug/print_funcs.c                    \
@@ -105,6 +107,7 @@ INC_PATH = \
        ../skeleton/usb \
        ../skeleton/usb/ftdi \
        ../skeleton/usb/hid \
+       ../teletype \
        avr32/boards                                       \
        avr32/drivers/cpu/cycle_counter                    \
        avr32/drivers/flashc                               \
@@ -113,7 +116,7 @@ INC_PATH = \
        avr32/drivers/pm                                   \
        avr32/drivers/spi                                  \
        avr32/drivers/tc                                   \
-       avr32/drivers/twi								  \
+       avr32/drivers/twi				  \
        avr32/drivers/usart                                \
        avr32/drivers/usbb                                 \
        avr32/utils                                        \

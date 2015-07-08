@@ -1359,10 +1359,18 @@ static void orca_process_ii(uint8_t i, int d)
 {
 	switch(i)
 	{
-		case WW_PRESET:
-			banks[cb].cp = (u8)d;
+		case ORCA_BANK:
+			cb = abs(d) & 0x7;
 			updatePresetCache();
+			updateOutputs();
 			break;
+		
+		case ORCA_PRESET:
+			banks[cb].cp = abs(d) & 0x7;
+			updatePresetCache();
+			updateOutputs();
+			break;
+			
 		default:
 			break;
 	}
@@ -2073,6 +2081,7 @@ void updatePresetCache(void)
 	for (u8 k = 0; k < 8; k++) mutateSeq[k] = banks[cb].presets[banks[cb].cp].mutateSeq[k];
 	globalReset = banks[cb].presets[banks[cb].cp].globalReset;
 	adjustAllCounters();
+	redraw();
 }
 
 // flash commands
@@ -2171,7 +2180,7 @@ int main(void)
 
 	init_usb_host();
 	init_monome();
-	init_i2c_slave(0x10);
+	init_i2c_slave(ORCA);
 
 	if (flash_is_fresh())
 		initializeValues();

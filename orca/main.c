@@ -186,6 +186,7 @@ u8 showTriggers = 0, showRandomized = 0, bankToShow = 8, presetToShow = 8, prese
 u8 scalePressed = 0, presetModePressed = 0;
 u8 prevXPressed = 16, prevXReleased = 16, prevYPressed = 8, prevYReleased = 8;
 u8 randomizeX = 16, randomizeY = 4;
+u8 iiTrack = 0;
 
 struct preset {
 	u8 scale;
@@ -1359,20 +1360,93 @@ static void orca_process_ii(uint8_t i, int d)
 {
 	switch(i)
 	{
+		case ORCA_TRACK:
+			iiTrack = abs(d) & 3;
+			break;
+		
+		case ORCA_DIVISOR:
+			divisor[iiTrack] = banks[cb].presets[banks[cb].cp].divisor[iiTrack] = (abs(d - 1) & 15) + 1;
+			break;
+		
+		case ORCA_PHASE:
+			phase[iiTrack] = banks[cb].presets[banks[cb].cp].phase[iiTrack] = abs(d) % 17;
+			break;
+		
+		case ORCA_WEIGHT:
+			weight[iiTrack] = banks[cb].presets[banks[cb].cp].weight[iiTrack] = (abs(d - 1) & 7) + 1;
+			break;
+		
+		case ORCA_MUTE:
+			gateMuted[iiTrack] = banks[cb].presets[banks[cb].cp].gateMuted[iiTrack] = d == 0 ? 0 : !0;
+			break;
+		
+		case ORCA_SCALE:
+			scale = banks[cb].presets[banks[cb].cp].scale = abs(d) & 15;
+			break;
+		
+		case ORCA_RANDOM:
+			generateRandom((abs(d) & 3) + 1, (abs(d) & 15) + 1);
+			showRandomized = 1;
+			adjustAllCounters();
+			break;
+		
 		case ORCA_BANK:
-			cb = abs(d) & 0x7;
+			cb = abs(d) & 7;
+			bankToShow = cb;
 			updatePresetCache();
-			updateOutputs();
 			break;
 		
 		case ORCA_PRESET:
-			banks[cb].cp = abs(d) & 0x7;
+			banks[cb].cp = abs(d) & 7;
+			presetToShow = banks[cb].cp;
 			updatePresetCache();
-			updateOutputs();
 			break;
 			
-		default:
+		case ORCA_RELOAD:
+			if (d == 8)
+			{
+				loadBank(cb, 0);
+				bankToShow = cb;
+				updatePresetCache();
+			}
+			else if (d == 9)
+			{
+				for (u8 b = 0; b < 8; b++) loadBank(b, 0);
+				updatePresetCache();
+			}
+			else if (d >= 0 && d < 8)
+			{
+				loadBank(d, 0);
+				bankToShow = d;
+				updatePresetCache();
+			}
 			break;
+		
+		case ORCA_ROTATES:
+		
+			break;
+		
+		case ORCA_ROTATEW:
+			break;
+		
+		case ORCA_MUTATE:
+			break;
+		
+		case ORCA_GRESET:
+			break;
+
+			case ORCA_CLOCK:
+			break;
+		
+		case ORCA_RESET:
+			break;
+		
+	}
+	
+	if (i != ORCA_TRACK)
+	{
+		redraw();
+		updateOutputs();
 	}
 }
 
@@ -1813,7 +1887,7 @@ static void handler_MonomeGridKey(s32 data)
 				
 				if (doublePress)
 				{
-					if (!flash_is_fresh()) loadBank(cb, 0);
+					loadBank(cb, 0);
 					bankToShow = cb;
 				}
 				updatePresetCache();
@@ -1833,7 +1907,7 @@ static void handler_MonomeGridKey(s32 data)
 				
 				if (doublePress)
 				{
-					if (!flash_is_fresh()) loadPreset(cb, banks[cb].cp);
+					loadPreset(cb, banks[cb].cp);
 					presetToShow = banks[cb].cp;
 				}
 				updatePresetCache();
@@ -2081,7 +2155,6 @@ void updatePresetCache(void)
 	for (u8 k = 0; k < 8; k++) mutateSeq[k] = banks[cb].presets[banks[cb].cp].mutateSeq[k];
 	globalReset = banks[cb].presets[banks[cb].cp].globalReset;
 	adjustAllCounters();
-	redraw();
 }
 
 // flash commands
@@ -2183,7 +2256,10 @@ int main(void)
 	init_i2c_slave(ORCA);
 
 	if (flash_is_fresh())
+	{
 		initializeValues();
+		flash_write();
+	}
 	else 
 		flash_read();
 

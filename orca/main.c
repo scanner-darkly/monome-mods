@@ -1384,12 +1384,6 @@ static void orca_process_ii(uint8_t i, int d)
 			scale = banks[cb].presets[banks[cb].cp].scale = abs(d) & 15;
 			break;
 		
-		case ORCA_RANDOM:
-			generateRandom((abs(d) & 3) + 1, (abs(d) & 15) + 1);
-			showRandomized = 1;
-			adjustAllCounters();
-			break;
-		
 		case ORCA_BANK:
 			cb = abs(d) & 7;
 			bankToShow = cb;
@@ -1429,13 +1423,16 @@ static void orca_process_ii(uint8_t i, int d)
 		case ORCA_ROTATEW:
 			break;
 		
-		case ORCA_MUTATE:
+		case ORCA_CVA:
+			break;
+		
+		case ORCA_CVB:
 			break;
 		
 		case ORCA_GRESET:
 			break;
 
-			case ORCA_CLOCK:
+		case ORCA_CLOCK:
 			break;
 		
 		case ORCA_RESET:
@@ -1445,8 +1442,8 @@ static void orca_process_ii(uint8_t i, int d)
 	
 	if (i != ORCA_TRACK)
 	{
-		redraw();
 		updateOutputs();
+		redraw();
 	}
 }
 

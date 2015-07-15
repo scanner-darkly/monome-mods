@@ -267,6 +267,7 @@ void generateChaos(void);
 void generateRandom(u8 max, u8 paramCount);
 void mutate(void);
 void rotateScales(s8 amount);
+void rotateWeights_(s8 amount);
 void loadPreset(u8 b, u8 p);
 void loadBank(u8 b, u8 updatecp);
 void copyBank(u8 source, u8 dest);
@@ -1026,6 +1027,37 @@ void rotateScales(s8 amount)
 	}
 }
 
+void rotateWeights_(s8 amount)
+{
+	if (amount < 0)
+	{
+		for (s8 j = 0; j < -amount; j++)
+		{
+			u8 temp = weight[3];
+			weight[3] = weight[2];
+			weight[2] = weight[1];
+			weight[1] = weight[0];
+			weight[0] = temp;
+		}
+		for (u8 i = 0; i < 4; i++)
+			banks[cb].presets[banks[cb].cp].weight[i] = weight[i];
+	}
+
+	if (amount > 0)
+	{
+		for (s8 j = 0; j < amount; j++)
+		{
+			u8 temp = weight[0];
+			weight[0] = weight[1];
+			weight[1] = weight[2];
+			weight[2] = weight[3];
+			weight[3] = temp;
+		}
+		for (u8 i = 0; i < 4; i++)
+			banks[cb].presets[banks[cb].cp].weight[i] = weight[i];
+	}
+}
+
 void updateglobalLength()
 {
 	globalLength = 1;
@@ -1083,33 +1115,8 @@ void clock(u8 phase) {
 		if (!(gridParam == SCALE && isScalePreview))
 			rotateScales(rotateScale[seq16]);
 
-		if (!(gridParam == SCALE && isScalePreview) && rotateWeights[seq16] < 0)
-		{
-			for (s8 j = 0; j < -rotateWeights[seq16]; j++)
-			{
-				u8 temp = weight[3];
-				weight[3] = weight[2];
-				weight[2] = weight[1];
-				weight[1] = weight[0];
-				weight[0] = temp;
-			}
-			for (u8 i = 0; i < 4; i++)
-				banks[cb].presets[banks[cb].cp].weight[i] = weight[i];
-		}
-		
-		if (!(gridParam == SCALE && isScalePreview) && rotateWeights[seq16] > 0)
-		{
-			for (s8 j = 0; j < rotateWeights[seq16]; j++)
-			{
-				u8 temp = weight[0];
-				weight[0] = weight[1];
-				weight[1] = weight[2];
-				weight[2] = weight[3];
-				weight[3] = temp;
-			}
-			for (u8 i = 0; i < 4; i++)
-				banks[cb].presets[banks[cb].cp].weight[i] = weight[i];
-		}
+		if (!(gridParam == SCALE && isScalePreview))
+			rotateWeights_(rotateWeights[seq16]);
 		
 		if (!(gridParam == SCALE && isScalePreview) && getMutateSeq(globalCounter & 63))
 		{
@@ -1366,6 +1373,7 @@ static void orca_process_ii(uint8_t i, int d)
 		
 		case ORCA_DIVISOR:
 			divisor[iiTrack] = banks[cb].presets[banks[cb].cp].divisor[iiTrack] = (abs(d - 1) & 15) + 1;
+			adjustCounter(iiTrack);
 			break;
 		
 		case ORCA_PHASE:
@@ -1377,7 +1385,7 @@ static void orca_process_ii(uint8_t i, int d)
 			break;
 		
 		case ORCA_MUTE:
-			gateMuted[iiTrack] = banks[cb].presets[banks[cb].cp].gateMuted[iiTrack] = d == 0 ? 0 : !0;
+			gateMuted[iiTrack] = banks[cb].presets[banks[cb].cp].gateMuted[iiTrack] = d ? !0 : 0;
 			break;
 		
 		case ORCA_SCALE:
@@ -1397,36 +1405,67 @@ static void orca_process_ii(uint8_t i, int d)
 			break;
 			
 		case ORCA_RELOAD:
-			if (d == 8)
+			if (d == 0) // reload current preset
+			{
+				loadPreset(cb, banks[cb].cp);
+				presetToShow = banks[cb].cp;
+				updatePresetCache();
+			}
+			else if (d == 1) // reload current bank
 			{
 				loadBank(cb, 0);
 				bankToShow = cb;
 				updatePresetCache();
 			}
-			else if (d == 9)
+			else if (d == 2) // reload all banks
 			{
 				for (u8 b = 0; b < 8; b++) loadBank(b, 0);
-				updatePresetCache();
-			}
-			else if (d >= 0 && d < 8)
-			{
-				loadBank(d, 0);
-				bankToShow = d;
 				updatePresetCache();
 			}
 			break;
 		
 		case ORCA_ROTATES:
-		
+			rotateScales(d % 16);
 			break;
 		
 		case ORCA_ROTATEW:
+			rotateWeights_(d % 4);
 			break;
 		
 		case ORCA_CVA:
+			if (d >= 0)
+			{
+				mixerA = banks[cb].presets[banks[cb].cp].mixerA = d & 15;
+			}
+			else
+			{
+				d = -d;
+				mixerA = alwaysOnA = 0;
+				if ((d / 1000) % 10 == 1) mixerA = 0b1000; else if ((d / 1000) % 10 == 2) alwaysOnA = 0b1000;
+				if ((d / 100 ) % 10 == 1) mixerA |= 0b0100; else if ((d / 100) % 10 == 2) alwaysOnA |= 0b0100;
+				if ((d / 10 ) % 10 == 1) mixerA |= 0b0010; else if ((d / 10) % 10 == 2) alwaysOnA |= 0b0010;
+				if (d % 10 == 1) mixerA |= 0b0001; else if (d % 10 == 2) alwaysOnA |= 0b0001;
+				banks[cb].presets[banks[cb].cp].mixerA = mixerA;
+				banks[cb].presets[banks[cb].cp].alwaysOnA = alwaysOnA;
+			}
 			break;
 		
 		case ORCA_CVB:
+			if (d >= 0)
+			{
+				mixerB = banks[cb].presets[banks[cb].cp].mixerB = d & 15;
+			}
+			else
+			{
+				d = -d;
+				mixerB = alwaysOnB = 0;
+				if ((d / 1000) % 10 == 1) mixerB = 0b1000; else if ((d / 1000) % 10 == 2) alwaysOnB = 0b1000;
+				if ((d / 100 ) % 10 == 1) mixerB |= 0b0100; else if ((d / 100) % 10 == 2) alwaysOnB |= 0b0100;
+				if ((d / 10 ) % 10 == 1) mixerB |= 0b0010; else if ((d / 10) % 10 == 2) alwaysOnB |= 0b0010;
+				if (d % 10 == 1) mixerB |= 0b0001; else if (d % 10 == 2) alwaysOnB |= 0b0001;
+				banks[cb].presets[banks[cb].cp].mixerB = mixerB;
+				banks[cb].presets[banks[cb].cp].alwaysOnB = alwaysOnB;
+			}
 			break;
 		
 		case ORCA_GRESET:

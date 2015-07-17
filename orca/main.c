@@ -456,7 +456,7 @@ void redrawGrid(void)
 		for (u8 i = 0; i < 4; i++)
 		{
 			seqOffset = (i << 4) + 64;
-			brighter = triggerOn[i] || showTriggersG || showTriggers[i] ? 3 : 0;
+			brighter = triggerOn[i] || showTriggers[i] ? 3 : 0;
 			
 			monomeLedBuffer[seqOffset] = (gateMuted[i] ? 0 : 12) + brighter;
 			monomeLedBuffer[seqOffset + 1] = gateType[i] * 6 + brighter;
@@ -811,81 +811,77 @@ void updateTriggerOutputs(u8 fromClock)
 	if (gridParam == SCALE && isScalePreview)
 	{
         timer_remove(&triggerSettingsTimerG);
-        for (u8 i = 0; i < 4; i++)
+        for (u8 trig = 0; trig < 4; trig++)
         {
-            timer_remove(&triggerTimer[i]);
-            timer_remove(&triggerSettingsTimer[i]);
-            if (gateMuted[i]) gpio_clr_gpio_pin(TRIGGERS[i]); else gpio_set_gpio_pin(TRIGGERS[i]);
+            timer_remove(&triggerTimer[trig]);
+            timer_remove(&triggerSettingsTimer[trig]);
+            if (gateMuted[trig]) gpio_clr_gpio_pin(TRIGGERS[trig]); else gpio_set_gpio_pin(TRIGGERS[trig]);
+			timer_add(&triggerTimer[trig], 20, triggerTimer_callbacks[trig], NULL);
         }
         return;
 	}
-    u16 currentOn, trigOn, offset;
-    u8 trackIncluded;
-    u8 f[4];
-    f[0] = gateLogic[0] && gateTracks[0];
-    f[1] = gateLogic[1] && gateTracks[1];
-    f[2] = gateLogic[2] && gateTracks[2];
-    f[3] = gateLogic[3] && gateTracks[3];
-    
-    for (u8 seq = 0; seq < 4; seq++)
-    {
-        offset = counter[seq] + (divisor[seq] << 6) - phase[seq];
-        currentOn = (offset / divisor[seq]) & 1;
-        
-        if (!fromClock || (chance[seq] < ((rnd() % 20)+1)))
-        {
-            for (u8 trig = 0; trig < 4; trig++)
-            {
-                trackIncluded = gateTracks[trig] & (1 << seq);
-                trigOn = !gateType[trig] ? prevOn[seq] != currentOn : !prevOn[seq] && currentOn;
-                
-                if (gateLogic[trig]) // AND
-                {
-                    if (trackIncluded) f[trig] &= gateType[trig] == 2 ? currentOn : trigOn;
-                }
-                else // OR
-                {
-                    if (trackIncluded) f[trig] |= gateType[trig] == 2 ? currentOn : trigOn;
-                }
-            }
-        }
-        
-        prevOn[seq] = currentOn;
-    }
-
-    if (gateNot[0]) f[0] = !f[0];
-    if (gateNot[1]) f[1] = !f[1];
-    if (gateNot[2]) f[2] = !f[2];
-    if (gateNot[3]) f[3] = !f[3];
-
-    if (fromClock)
-    {
-        for (u8 trig = 0; trig < 4; trig++) triggerOn[trig] = f[trig];
-    }
-    
-    for (u8 trig = 0; trig < 4; trig++)
-    {
-        if (gateMuted[trig])
-        {
+	
+	// if only one clock advanced we only want to update triggers that include it
+	// if global clock advanced we update all triggers
+	// if not from a clock we only update mutes and gates
+	
+    u16 currentOn[4], offset;
+	for (u8 seq = 0; seq < 4; seq++)
+	{
+		offset = counter[seq] + (divisor[seq] << 6) - phase[seq];
+		currentOn[seq] = (offset / divisor[seq]) & 1;
+	}
+		
+	u8 t, trackIncluded;
+    u16 trigOn;
+	for (u8 trig = 0; trig < 4; trig++)
+	{
+		t = gateLogic[trig] && gateTracks[trig];
+		for (u8 seq = 0; seq < 4; seq++)
+		{
+			trackIncluded = gateTracks[trig] & (1 << seq);
+			trigOn = !gateType[trig] ? prevOn[seq] != currentOn[seq] : !prevOn[seq] && currentOn[seq];
+			if (gateLogic[trig]) // AND
+			{
+				if (trackIncluded && (!fromClock || chance[seq] < ((rnd() % 20)+1))) t &= gateType[trig] == 2 ? currentOn[seq] : trigOn;
+			}
+			else // OR
+			{
+				if (trackIncluded && (!fromClock || chance[seq] < ((rnd() % 20)+1))) t |= gateType[trig] == 2 ? currentOn[seq] : trigOn;
+			}
+		}
+		if (gateNot[0]) t = !t;
+		
+		if (gateType[trig] != 2 && t)
+		{
+			showTriggers[trig] = 1;
+			timer_add(&triggerSettingsTimer[trig], 100, triggerSettingsTimer_callbacks[trig], NULL);
+		}
+		
+		if (gateMuted[trig])
+		{
+			triggerOn[trig] = 0;
             timer_remove(&triggerTimer[trig]);
-            gpio_clr_gpio_pin(TRIGGERS[trig]);
-        }
-        else if (triggerOn[trig])
-        {
+			gpio_clr_gpio_pin(TRIGGERS[trig]);
+		}
+		else if (gateType[trig] == 2)
+		{
+			triggerOn[trig] = 0;
+            timer_remove(&triggerTimer[trig]);
+			if (t) gpio_set_gpio_pin(TRIGGERS[trig]); else gpio_clr_gpio_pin(TRIGGERS[trig]);
+		}
+		else if (t && fromClock && (fromClock == 5 || (gateTracks[trig] & (1 << (fromClock - 1)))))
+		{
+			triggerOn[trig] = 1;
             timer_add(&triggerTimer[trig], 20, triggerTimer_callbacks[trig], NULL);
             gpio_set_gpio_pin(TRIGGERS[trig]);
-        }
-        else
-        {
-            timer_remove(&triggerTimer[trig]);
-            gpio_clr_gpio_pin(TRIGGERS[trig]);
-        }
-    }
-
-    showTriggersG = 1;
-    timer_add(&triggerSettingsTimerG, 100, &triggerSettingsTimerG_callback, NULL);
-    // showTriggers[0] = 1;
-    // timer_add(&triggerSettingsTimer[0], 100, triggerSettingsTimer_callbacks[0], NULL);
+		}
+	}
+	
+	for (u8 seq = 0; seq < 4; seq++)
+	{
+		if (fromClock == 5 || fromClock == seq + 1) prevOn[seq] = currentOn[seq];
+	}
 }
 
 u8 random8(void)
@@ -1178,6 +1174,9 @@ void clock(u8 phase) {
 			mutate();
 			adjustAllCounters();
 		}
+		
+		showTriggersG = 1;
+		timer_add(&triggerSettingsTimerG, 100, &triggerSettingsTimerG_callback, NULL);
 		
 		updateCVOutputs(5);
 		updateTriggerOutputs(5);
@@ -1602,25 +1601,33 @@ static void orca_process_ii(uint8_t i, int d)
 			break;
 		
 		case ORCA_GRESET:
-            // TODO
+			globalCounter = counter[0] = counter[1] = counter[2] = counter[3] = 0;
 			updateCVOutputs(5);
             updateTriggerOutputs(5);
 			redraw();
 			break;
 
 		case ORCA_CLOCK:
-            // TODO
-            ii = (abs(d) & 3) + 1;
-			updateCVOutputs(ii);
-            updateTriggerOutputs(ii);
+            ii = abs(d) & 3;
+			counter[ii]++;
+			if (reset[ii])
+			{
+				if (counter[ii] >= reset[ii]) counter[ii] = 0;
+			}
+			else
+			{
+				if (counter[ii] >= ((u16)divisor[ii] << 6)) counter[ii] = 0;
+			}
+			updateCVOutputs(ii + 1);
+            updateTriggerOutputs(ii + 1);
 			redraw();
 			break;
 		
 		case ORCA_RESET:
-            // TODO
-            ii = (abs(d) & 3) + 1;
-			updateCVOutputs(ii);
-            updateTriggerOutputs(ii);
+            ii = abs(d) & 3;
+			counter[ii] = 0;
+			updateCVOutputs(ii + 1);
+            updateTriggerOutputs(ii + 1);
 			redraw();
 			break;
 		

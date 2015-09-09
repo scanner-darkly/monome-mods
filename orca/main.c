@@ -48,6 +48,7 @@
 #define GLOBALRESET 11
 
 #define COUNTERS 12
+#define DEBUG 13
 
 
 u8 SCALE_PRESETS[16][16] = {
@@ -172,7 +173,7 @@ u8 scalePreviewEnabled = 0;
 u8 scaleBlink = 0;
 u8 prevSelectedScaleColumn = 4;
 u8 currentScaleRow = 0, currentScaleColumn = 0;
-// u8 debug1, debug2 = 0;
+int debug[4] = {0, 0, 0, 0};
 
 u8 arc2index = 0; // 0 - show tracks 1&2, 1 - show tracks 3&4
 u8 arc4index = 0; // 0 - show tracks, 1 - show values
@@ -350,6 +351,17 @@ void redrawGrid(void)
 		for (u8 i = 0; i < 4; i++)
 			for (u8 led = 0; led < 16; led++)
 				monomeLedBuffer[64+(i<<4)+led] = led < (counter[i] & 15) ? 15 : 0;
+    }
+    else if (gridParam == DEBUG)
+    {
+		for (u8 i = 0; i < 4; i++)
+		{
+			u8 sign = debug[i] < 0 ? 7 : 15;
+			u16 value = debug[i] < 0 ? (u16)(-debug[i]) : (u16)debug[i];
+			for (u8 led = 0; led < 16; led++)
+				monomeLedBuffer[64+(i<<4)+led] = led < value ? sign : 0;
+		
+		}
     }
     else if (gridParam == DIVISOR)
 	{
@@ -577,7 +589,7 @@ void redrawGrid(void)
 		for (u8 i = 0; i < 64; i++)
 		{
 			add = step == i ? 3 : 0;
-			monomeLedBuffer[64 + i] = (i < globalReset ? 12 : 2) + add;
+			monomeLedBuffer[64 + i] = (i < globalReset ? 12 : 0) + add;
 		}
 	}
 	
@@ -1467,7 +1479,6 @@ static void handler_ClockNormal(s32 data) {
 	clock_external = !gpio_get_pin_value(B09); 
 }
 
-
 static void orca_process_ii(uint8_t i, int d)
 {
     u8 ii;
@@ -1476,7 +1487,7 @@ static void orca_process_ii(uint8_t i, int d)
 	switch(i)
 	{
 		case ORCA_TRACK:
-			iiTrack = abs(d) & 3;
+			iiTrack = abs(d - 1) & 3;
 			break;
 		
 		case ORCA_DIVISOR:
@@ -1502,13 +1513,13 @@ static void orca_process_ii(uint8_t i, int d)
 			break;
 		
 		case ORCA_SCALE:
-			scale = banks[cb].presets[banks[cb].cp].scale = abs(d) & 15;
+			scale = banks[cb].presets[banks[cb].cp].scale = abs(d - 1) & 15;
 			updateCVOutputs(0);
 			redraw();
 			break;
 		
 		case ORCA_BANK:
-			cb = abs(d) & 7;
+			cb = abs(d - 1) & 7;
 			bankToShow = cb;
 			updatePresetCache();
 			updateCVOutputs(0);
@@ -1517,7 +1528,7 @@ static void orca_process_ii(uint8_t i, int d)
 			break;
 		
 		case ORCA_PRESET:
-			banks[cb].cp = abs(d) & 7;
+			banks[cb].cp = abs(d - 1) & 7;
 			presetToShow = banks[cb].cp;
 			updatePresetCache();
 			updateCVOutputs(0);
@@ -1608,7 +1619,7 @@ static void orca_process_ii(uint8_t i, int d)
 			break;
 
 		case ORCA_CLOCK:
-            ii = abs(d) & 3;
+            ii = abs(d - 1) & 3;
 			counter[ii]++;
 			if (reset[ii])
 			{
@@ -1624,13 +1635,12 @@ static void orca_process_ii(uint8_t i, int d)
 			break;
 		
 		case ORCA_RESET:
-            ii = abs(d) & 3;
+            ii = abs(d - 1) & 3;
 			counter[ii] = 0;
 			updateCVOutputs(ii + 1);
             updateTriggerOutputs(ii + 1);
 			redraw();
 			break;
-		
 	}
 }
 
@@ -1908,7 +1918,10 @@ static void handler_MonomeGridKey(s32 data)
 		else if (y == 3)
 		{
 			gridParam = GLOBALRESET;
-			if (doublePress) globalCounter = globalLength;
+			if (doublePress)
+			{
+				globalCounter = counter[0] = counter[1] = counter[2] = counter[3] = 0;
+			}
 		}
 		
 		redraw();

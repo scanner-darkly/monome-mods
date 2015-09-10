@@ -939,8 +939,6 @@ void generateChaos(void)
 	}
 	banks[cb].presets[banks[cb].cp].mixerA = random8() & 15;
 	banks[cb].presets[banks[cb].cp].mixerB = random8() & 15;
-	banks[cb].presets[banks[cb].cp].alwaysOnA = random8() & 15;
-	banks[cb].presets[banks[cb].cp].alwaysOnB = random8() & 15;
 	updatePresetCache();
 }
 

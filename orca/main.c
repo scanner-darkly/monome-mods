@@ -177,7 +177,7 @@ int debug[4] = {0, 0, 0, 0};
 
 u8 arc2index = 0; // 0 - show tracks 1&2, 1 - show tracks 3&4
 u8 arc4index = 0; // 0 - show tracks, 1 - show values
-u8 isArc;
+u8 isArc, isVb;
 u8 gridParam = 0;
 u64 globalCounter = 0, globalLength;
 u16 counter[4] = {0, 0, 0, 0};
@@ -400,8 +400,8 @@ void redrawGrid(void)
 			for (u8 i = 0; i < 16; i++)
 			{
 				monomeLedBuffer[64 + i] = monomeLedBuffer[96 + i] = 0;
-				monomeLedBuffer[80 + i] = i;
-				monomeLedBuffer[112 + i] = i == scale ? 15 : 8;
+				monomeLedBuffer[80 + i] = isVb ? i : ((i & 1) * 15);
+				monomeLedBuffer[112 + i] = i == scale ? 15 : 7;
 			}
         }
         else
@@ -497,11 +497,13 @@ void redrawGrid(void)
 		}
 		else
 		{
+			u8 brightness;
 			for (u8 i = 0; i < 4; i++)
 			{
 				for (u8 led = 0; led < 16; led++)
 				{
-					monomeLedBuffer[64+(i<<4)+led] = showRandomized && (i == randomizeY) ? 0 : ((i << 1) + ((led * 10) >> 4));
+					brightness = isVb ? ((i << 1) + ((led * 10) >> 4)) : ((i + led) & 1) * 15;
+					monomeLedBuffer[64+(i<<4)+led] = showRandomized && (i == randomizeY) ? 0 : brightness;
 				}
 				if (showRandomized) monomeLedBuffer[64+(i<<4)+randomizeX] = 0;
 			}
@@ -516,14 +518,14 @@ void redrawGrid(void)
             monomeLedBuffer[64+(i<<1)] = 0;
             monomeLedBuffer[65+(i<<1)] = i == cb ? 13 : (i & 1 ? 5 : 0);
             monomeLedBuffer[80+(i<<1)] = i == cb ? 13 : (i & 1 ? 5 : 0);
-            monomeLedBuffer[81+(i<<1)] = i == cb ? 13 : (i & 1 ? 5 : 0);
+            monomeLedBuffer[81+(i<<1)] = isVb ? (i == cb ? 13 : (i & 1 ? 5 : 0)) : 15;
         }
         for (u8 i = 0; i < 8; i++)
         {
             monomeLedBuffer[96+(i<<1)] = i == banks[cb].cp ? 13 : (i & 1 ? 0 : 5);
             monomeLedBuffer[97+(i<<1)] = i == banks[cb].cp ? 13 : (i & 1 ? 0 : 5);
             monomeLedBuffer[112+(i<<1)] = i == banks[cb].cp ? 13 : (i & 1 ? 0 : 5);
-            monomeLedBuffer[113+(i<<1)] = i == banks[cb].cp ? 13 : (i & 1 ? 0 : 5);
+            monomeLedBuffer[113+(i<<1)] = isVb ? (i == banks[cb].cp ? 13 : (i & 1 ? 0 : 5)) : 15;
         }
 		if (presetToShow != 8)
 		{
@@ -605,7 +607,7 @@ void redrawGrid(void)
 		{
 			current = _counter + (divisor[seq] << 4) - phase[seq];
 			currentOn = (current / divisor[seq]) & 1;
-			monomeLedBuffer[13 - led + seqOffset] = currentOn ? 15 - led : 0;
+			monomeLedBuffer[13 - led + seqOffset] = (!isVb && led == 10) ? 0 : (currentOn ? (isVb ? 15 - led : 15) : 0);
 			
             _globalCounter++;
             if (_globalCounter >= globalLength || (globalReset && _globalCounter >= globalReset))
@@ -629,8 +631,8 @@ void redrawGrid(void)
 		current = counter[seq] + (divisor[seq] << 4) - phase[seq];
 		currentOn = (current / divisor[seq]) & 1;
 		
-		monomeLedBuffer[14 + seqOffset] = alwaysOnA & (1 << seq) ? 15 : (mixerA & (1 << seq) ? (currentOn ? 12 : 6) : 0);
-		monomeLedBuffer[15 + seqOffset] = alwaysOnB & (1 << seq) ? 15 : (mixerB & (1 << seq) ? (currentOn ? 12 : 6) : 0);
+		monomeLedBuffer[14 + seqOffset] = alwaysOnA & (1 << seq) ? 15 : (mixerA & (1 << seq) ? (currentOn ? 12 : (isVb ? 6 : 15)) : 0);
+		monomeLedBuffer[15 + seqOffset] = alwaysOnB & (1 << seq) ? 15 : (mixerB & (1 << seq) ? (currentOn ? 12 : (isVb ? 6 : 15)) : 0);
 	}
 	
 	if (valueToShow == 5) // show scale
@@ -1361,6 +1363,7 @@ static void handler_FtdiDisconnect(s32 data) {
 static void handler_MonomeConnect(s32 data) {
 	timers_set_monome();
 	isArc = monome_device() == eDeviceArc;
+	isVb = monome_is_vari();
 	if (monome_device() == eDeviceGrid)
 	{
 		isDivisorArc = isPhaseArc = isMixerArc = 0;

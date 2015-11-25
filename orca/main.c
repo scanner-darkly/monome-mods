@@ -31,6 +31,7 @@
 	
 #define FIRSTRUN_KEY 0x51
 #define ENCODER_DELTA_SENSITIVITY 40
+#define NOTEMAX 60
 
 #define DIVISOR 0
 #define PHASE 1
@@ -71,10 +72,12 @@ u8 SCALE_PRESETS[16][16] = {
     {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15}	// chromatic
 };
 
-const u16 CHROMATIC[36] = {
-	0, 34, 68, 102, 136, 170, 204, 238, 272, 306, 340, 375,
-	409, 443, 477, 511, 545, 579, 613, 647, 681, 715, 750, 784,
-	818, 852, 886, 920, 954, 988, 1022, 1056, 1090, 1125, 1159, 1193
+const u16 CHROMATIC[NOTEMAX] = {
+	   0,   34,   68,  102,  136,  170,  204,  238,  272,  306,  340,  375,
+	 409,  443,  477,  511,  545,  579,  613,  647,  681,  715,  750,  784,
+	 818,  852,  886,  920,  954,  988, 1022, 1056, 1090, 1125, 1159, 1193,
+	1227, 1261, 1295, 1329, 1363, 1397, 1431, 1465, 1500, 1534, 1568, 1602,
+	1636, 1670, 1704, 1738, 1772, 1806, 1841, 1875, 1909, 1943, 1977, 2011
 };
 
 const u8 DIVISOR_PRESETS[16][4] =
@@ -184,7 +187,7 @@ u16 counter[4] = {0, 0, 0, 0};
 u8 triggerOn[4] = {0, 0, 0, 0};
 u16 prevOn[4] = {0, 0, 0, 0};
 u8 flashConfirmation = 0;
-u8 showTriggersG = 0, showRandomized = 0, bankToShow = 8, presetToShow = 8, presetPressed = 8, bankPressed = 8;
+u8 showTriggersG = 0, showRandomized = 0, bankToShow = 8, presetToShow = 8, presetPressed = 8, bankPressed = 8, notePressedIndex = 12;
 u8 showTriggers[4] = {0, 0, 0, 0};
 u8 scalePressed = 0, presetModePressed = 0;
 u8 prevXPressed = 16, prevXReleased = 16, prevYPressed = 8, prevYReleased = 8;
@@ -423,7 +426,7 @@ void redrawGrid(void)
                 
                 // display current note for the currently selected row
                 noteIndex = scales[scale][(currentScaleRow << 2) + x];
-                monomeLedBuffer[68 + (x << 4) + (noteIndex % 12)] = 4 + ((noteIndex / 12) << 2);
+                monomeLedBuffer[68 + (x << 4) + (noteIndex % 12)] = 2 + ((noteIndex / 12) * 3);
             }
             
             // currently selected note in the 4x4 block
@@ -447,7 +450,7 @@ void redrawGrid(void)
                 if ((cvA>>2) == currentScaleRow)
                 {
                     noteIndex = scales[scale][cvA] % 12;
-                    monomeLedBuffer[68 + ((cvA & 3) << 4) + noteIndex] += 3;
+                    monomeLedBuffer[68 + ((cvA & 3) << 4) + noteIndex]++;
                 }
             }
         }    
@@ -929,7 +932,7 @@ void generateChaos(void)
 {
 	for (u8 i = 0; i < 4; i++)
 	{
-		for (u8 j = 0; j < 16; j++) banks[cb].presets[banks[cb].cp].scales[banks[cb].presets[banks[cb].cp].scale][j] = random8() % 36;
+		for (u8 j = 0; j < 16; j++) banks[cb].presets[banks[cb].cp].scales[banks[cb].presets[banks[cb].cp].scale][j] = random8() % NOTEMAX;
 		banks[cb].presets[banks[cb].cp].divisor[i] = (random8() & 15) + 1;
 		banks[cb].presets[banks[cb].cp].phase[i] = random8() % 16;
 		banks[cb].presets[banks[cb].cp].reset[i] = random8() % 16;
@@ -1829,7 +1832,7 @@ static void handler_MonomeGridKey(s32 data)
 	timer_remove(&confirmationTimer);
 	timer_add(&confirmationTimer, 100, &confirmationTimer_callback, NULL);
 
-	if (!z) 
+	if (!z) // key up
 	{
 		prevXReleased = x;
 		prevYReleased = y;
@@ -1850,8 +1853,35 @@ static void handler_MonomeGridKey(s32 data)
 			if (y < 6 && bankPressed == (x >> 1)) bankPressed = 8;
 			if (y > 5 && presetPressed == (x >> 1)) presetPressed = 8;
 		}
-	
+		
+		if (notePressedIndex == x - 4 && currentScaleColumn == y - 4)
+		{
+			notePressedIndex = 12;
+		}
+
 		return;
+	}
+	
+	if (notePressedIndex < 12 && gridParam == SCALE) // octave selection
+	{
+        if (x - 4 != notePressedIndex || y - 4 != currentScaleColumn)
+		{
+			u8 noteIndex = scales[scale][(currentScaleRow<<2)+currentScaleColumn]; // currently selected note
+			u8 octave = noteIndex / 12; // current octave
+			
+			if (octave > 0 && (y - 4 > currentScaleColumn || x - 4 < notePressedIndex)) // octave down
+				octave--;
+			else if (y - 4 < currentScaleColumn || x - 4 > notePressedIndex) // octave up
+			{
+				octave++;
+				if (octave > NOTEMAX / 12 - 1) octave = NOTEMAX / 12 - 1;
+			}
+			noteIndex = (noteIndex % 12) + octave * 12;
+			banks[cb].presets[banks[cb].cp].scales[scale][(currentScaleRow<<2)+currentScaleColumn] = scales[scale][(currentScaleRow<<2)+currentScaleColumn] = noteIndex;
+			if (isScalePreview) updateCVOutputs(0);
+			redraw();
+			return;
+		}
 	}
 	
 	u8 doublePress = prevXPressed == prevXReleased && prevXReleased == x && prevYPressed == prevYReleased && prevYReleased == y;
@@ -2011,15 +2041,18 @@ static void handler_MonomeGridKey(s32 data)
 		if (noteIndex % 12 == x) // same note
 		{
             if (prevSelectedScaleColumn == currentScaleColumn)
-                noteIndex = (noteIndex + 12) % 36;
+                noteIndex = (noteIndex + 12) % NOTEMAX; // raise octave
 		}
 		else
 		{
-			noteIndex = x + noteIndex / 12 * 12;
+			noteIndex = x + noteIndex / 12 * 12; // select a different note within the same octave
 		}
         prevSelectedScaleColumn = currentScaleColumn;
         
 		banks[cb].presets[banks[cb].cp].scales[scale][(currentScaleRow<<2)+currentScaleColumn] = scales[scale][(currentScaleRow<<2)+currentScaleColumn] = noteIndex;
+		
+		notePressedIndex = x;
+		
 		if (isScalePreview) updateCVOutputs(0);
 		redraw();
 		return;

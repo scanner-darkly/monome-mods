@@ -2057,8 +2057,9 @@ static void handler_MonomeGridKey(s32 data)
         
 		if (noteIndex % 12 == x) // same note
 		{
-            if (prevSelectedScaleColumn == currentScaleColumn)
-                noteIndex = (noteIndex + 12) % NOTEMAX; // raise octave
+			// disabling the old way to scroll through octaves
+            // if (prevSelectedScaleColumn == currentScaleColumn)
+            //    noteIndex = (noteIndex + 12) % NOTEMAX; // raise octave
 		}
 		else
 		{

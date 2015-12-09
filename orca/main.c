@@ -1,4 +1,6 @@
 #include <stdio.h>
+#include <ctype.h>  //toupper
+#include <string.h> //memcpy
 
 // asf
 #include "delay.h"
@@ -11,6 +13,14 @@
 #include "gpio.h"
 #include "spi.h"
 #include "sysclk.h"
+
+#include "uhi_msc.h"
+#include "fat.h"
+#include "file.h"
+#include "fs_com.h"
+#include "navigation.h"
+#include "usb_protocol_msc.h"
+#include "uhi_msc_mem.h"
 
 // skeleton
 #include "types.h"
@@ -181,7 +191,7 @@ int debug[4] = {0, 0, 0, 0};
 u8 arc2index = 0; // 0 - show tracks 1&2, 1 - show tracks 3&4
 u8 arc4index = 0; // 0 - show tracks, 1 - show values
 u8 isArc, isVb;
-u8 gridParam = 0;
+u8 gridParam = DIVISOR;
 u64 globalCounter = 0, globalLength;
 u16 counter[4] = {0, 0, 0, 0};
 u8 triggerOn[4] = {0, 0, 0, 0};
@@ -257,6 +267,9 @@ static void handler_Front(s32 data);
 static void handler_ClockNormal(s32 data);
 static void orca_process_ii(uint8_t i, int d);
 
+static void usb_stick_save(void);
+static void usb_stick_load(void);
+static void usb_stick(u8 includeLoading);
 u8 flash_is_fresh(void);
 void flash_unfresh(void);
 void flash_write(void);
@@ -361,9 +374,12 @@ void redrawGrid(void)
 		{
 			u8 sign = debug[i] < 0 ? 7 : 15;
 			u16 value = debug[i] < 0 ? (u16)(-debug[i]) : (u16)debug[i];
+			/*
 			for (u8 led = 0; led < 16; led++)
 				monomeLedBuffer[64+(i<<4)+led] = led < value ? sign : 0;
-		
+			*/
+			for (u8 led = 0; led < 16; led++)
+				monomeLedBuffer[64+(i<<4)+led] = value & (1 << led) ? sign : 0;
 		}
     }
     else if (gridParam == DIVISOR)
@@ -1465,6 +1481,7 @@ static void handler_PollADC(s32 data) {
 
 static void handler_SaveFlash(s32 data) {
 	flash_write();
+	usb_stick(0);
 }
 
 static void handler_KeyTimer(s32 data) {
@@ -2389,6 +2406,154 @@ void updatePresetCache(void)
 	adjustAllCounters();
 }
 
+static void usb_stick_save()
+{
+	// file must be open for writing prior to calling this
+	file_putc('^');
+	file_putc('O');
+	file_putc('r');
+	file_putc('c');
+	file_putc('a');
+	file_putc('^');
+}
+
+static void usb_stick_load()
+{
+	// file must be open prior to calling this
+	char c;
+	while (!file_eof())
+	{
+		c = toupper(file_getc());
+		if (c == '@') 
+		{
+			divisor[0] = 12;
+			divisor[1] = 10;
+			divisor[2] = 12;
+			divisor[3] = 10;
+			phase[0] = 2;
+			phase[1] = 10;
+			phase[2] = 2;
+			phase[3] = 10;
+		}
+	} 
+
+	file_close();
+}
+
+static void usb_stick(u8 includeLoading)
+{
+	uint8_t usb_retry = 10;
+	uint8_t lun, lun_state = 0;
+	
+	while (usb_retry--)
+	{
+		if (uhi_msc_is_available())
+		{
+			if (!includeLoading)
+			{
+				char filename[13];
+				strcpy(filename, "orca_s0.txt");
+				for (u8 i = 0; i < 10; i++)
+				{
+					filename[6] = '0' + i;
+					if (nav_file_create((FS_STRING) filename)) break;
+				}
+				
+				if (file_open(FOPEN_MODE_W)) 
+				{
+					usb_stick_save();
+					file_close();
+					nav_filelist_reset();
+					nav_exit();
+					usb_retry = 0;
+				}
+			}
+		}
+		else
+		{
+			for (lun = 0; (lun < uhi_msc_mem_get_lun()) && (lun < 8); lun++)
+			{
+				// Mount drive
+				nav_drive_set(lun);
+				if (!nav_partition_mount())
+				{
+					if (fs_g_status == FS_ERR_HW_NO_PRESENT)
+					{
+						// The test can not be done, if LUN is not present
+						lun_state &= ~(1 << lun); // LUN test reseted
+						continue;
+					}
+					lun_state |= (1 << lun); // LUN test is done.
+					// ui_test_finish(false); // Test fail
+					continue;
+				}
+				// Check if LUN has been already tested
+				if (lun_state & (1 << lun))
+				{
+					continue;
+				}
+
+				// save
+				char filename[13];
+				strcpy(filename, "orca_s0.txt");
+				u8 contAfterBreak = 0;
+				for (u8 i = 0; i < 10; i++)
+				{
+					filename[6] = '0' + i;
+					if (nav_file_create((FS_STRING) filename)) break;
+					if (fs_g_status != FS_ERR_FILE_EXIST)
+					{
+						contAfterBreak = 1;
+						if (fs_g_status == FS_LUN_WP)
+						{
+							// Test can be done only on no write protected device
+							break;
+						}
+						lun_state |= (1 << lun); // LUN test is done.
+						break;
+					}
+				}
+				if (contAfterBreak) continue;
+				
+				if (!file_open(FOPEN_MODE_W))
+				{
+					if (fs_g_status == FS_LUN_WP)
+					{
+						// Test can be done only on no write protected device
+						continue;
+					}
+					lun_state |= (1 << lun); // LUN test is done.
+					continue;
+				}
+				
+				usb_stick_save();
+				file_close();
+				nav_filelist_reset();
+				
+				lun_state |= (1 << lun); // LUN test is done.
+				
+				// read
+				if (includeLoading)
+				{
+					strcpy(filename,"orca.txt");
+					if (nav_filelist_findname(filename, 0))
+					{
+						if(file_open(FOPEN_MODE_R))
+						{
+							usb_stick_load();
+						}
+					}
+				}
+			}
+
+			nav_exit();
+			usb_retry = 0;
+		}
+
+		delay_ms(100);
+	}
+}
+
 // flash commands
 u8 flash_is_fresh(void) {
 	return (flashy.fresh != FIRSTRUN_KEY);
@@ -2493,7 +2658,10 @@ int main(void)
 		flash_write();
 	}
 	else 
+	{
 		flash_read();
+	}
+	usb_stick(1);
 
 	process_ii = &orca_process_ii;
 	clock_pulse = &clock;

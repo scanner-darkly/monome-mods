@@ -199,7 +199,7 @@ u16 prevOn[4] = {0, 0, 0, 0};
 u8 flashConfirmation = 0;
 u8 showTriggersG = 0, showRandomized = 0, bankToShow = 8, presetToShow = 8, presetPressed = 8, bankPressed = 8, notePressedIndex = 12;
 u8 showTriggers[4] = {0, 0, 0, 0};
-u8 scalePressed = 0, presetModePressed = 0;
+u8 scalePressed = 0, scalePresetPressed = 16, userScalePressed = 16, presetModePressed = 0;
 u8 prevXPressed = 16, prevXReleased = 16, prevYPressed = 8, prevYReleased = 8;
 u8 randomizeX = 16, randomizeY = 4;
 u8 iiTrack = 0;
@@ -235,8 +235,11 @@ s8 rotateScale[16], rotateWeights[16];
 u8 mutateSeq[8];
 u8 globalReset;
 
+u8 userScalePresets[16][16];
+
 typedef const struct {
 	u8 fresh;
+	u8 userScalePresets[16][16];
     u8 currentBank;
 	struct bank banks[8];
 } nvram_data_t;
@@ -418,9 +421,10 @@ void redrawGrid(void)
         {
 			for (u8 i = 0; i < 16; i++)
 			{
-				monomeLedBuffer[64 + i] = monomeLedBuffer[96 + i] = 0;
+				monomeLedBuffer[64 + i] = 0;
 				monomeLedBuffer[80 + i] = isVb ? i : ((i & 1) * 15);
-				monomeLedBuffer[112 + i] = i == scale ? 15 : 7;
+				monomeLedBuffer[96 + i] = isVb ? 15 - i : (((i+1) & 1) * 15);
+				monomeLedBuffer[112 + i] = i == scale ? 15 : 4;
 			}
         }
         else
@@ -1865,6 +1869,12 @@ static void handler_MonomeGridKey(s32 data)
             presetModePressed = 0;
         }
     
+		if (gridParam == SCALE)
+		{
+			if (y == 5 && scalePresetPressed == x) scalePresetPressed = 16;
+			if (y == 7 && userScalePressed == x) userScalePressed = 16;
+		}
+	
 		if (gridParam == PRESETS)
 		{
 			if (y < 6 && bankPressed == (x >> 1)) bankPressed = 8;
@@ -2025,16 +2035,34 @@ static void handler_MonomeGridKey(s32 data)
 		if (scalePressed)
 		{
 			scalePreviewEnabled = 0;
+			
+			if (y == 6)
+			{
+				if (scalePresetPressed != 16)
+				{
+					for (u8 i = 0; i < 16; i++) userScalePresets[x][i] = SCALE_PRESETS[scalePresetPressed][i];
+				}
+				else if (userScalePressed != 16)
+				{
+					for (u8 i = 0; i < 16; i++) userScalePresets[x][i] = scales[userScalePressed][i];
+				}
+				else
+				{
+					for (u8 i = 0; i < 16; i++) banks[cb].presets[banks[cb].cp].scales[scale][i] = scales[scale][i] = userScalePresets[x][i];
+				}
+				redraw();
+				return;
+			}
+			
 			if (y == 5)
 			{
-				for (u8 i = 0; i < 16; i++)
-				{
-					banks[cb].presets[banks[cb].cp].scales[scale][i] = scales[scale][i] = SCALE_PRESETS[x][i];
-				}
+				for (u8 i = 0; i < 16; i++) banks[cb].presets[banks[cb].cp].scales[scale][i] = scales[scale][i] = SCALE_PRESETS[x][i];
+				scalePresetPressed = x;
 			}
 			else if (y == 7)
 			{
 				banks[cb].presets[banks[cb].cp].scale = scale = x;
+				userScalePressed = x;
 			}
 			redraw();
 			return;
@@ -2563,6 +2591,7 @@ u8 flash_is_fresh(void) {
 void flash_write(void)
 {
 	flashc_memset8((void*)&(flashy.fresh), FIRSTRUN_KEY, 4, true);
+	flashc_memcpy((void *)&flashy.userScalePresets, &userScalePresets, sizeof(userScalePresets), true);
 	flashc_memset8((void*)&(flashy.currentBank), cb, 1, true);
 	flashc_memcpy((void *)&flashy.banks, &banks, sizeof(banks), true);
 	timer_add(&flashSavedTimer, 140, &flashSavedTimer_callback, NULL);
@@ -2570,18 +2599,19 @@ void flash_write(void)
 	redraw();
 }
 
-void flash_read(void) {
+void flash_read(void)
+{
 	initializeValues();
-
-	for (u8 b = 0; b < 8; b++) 
-		loadBank(b, 1);
-
+	for (u8 j = 0; j < 16; j++) for (u8 k = 0; k < 16; k++) userScalePresets[j][k] = flashy.userScalePresets[j][k];
+	for (u8 b = 0; b < 8; b++) loadBank(b, 1);
     cb = flashy.currentBank;
 	updatePresetCache();
 }
 
 void initializeValues(void)
 {
+	for (u8 j = 0; j < 16; j++) for (u8 k = 0; k < 16; k++) userScalePresets[j][k] = SCALE_PRESETS[j][k];
+
     cb = 0;
 	u8 randDiv, randPh, randMix;
 	

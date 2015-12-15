@@ -464,7 +464,7 @@ void redrawGrid(void)
                 
                 // display current note for the currently selected row
                 noteIndex = scales[scale][(currentScaleRow << 2) + x];
-                monomeLedBuffer[68 + (x << 4) + (noteIndex % 12)] = 2 + ((noteIndex / 12) * 3);
+                monomeLedBuffer[68 + (x << 4) + (noteIndex % 12)] = 6 + ((noteIndex / 12) * 2);
             }
             
             // currently selected note in the 4x4 block
@@ -2636,342 +2636,349 @@ static void usb_stick_save()
 			usb_write_param("\t\tglobal reset", banks[b].presets[p].globalReset, 10);
 		}
 	}
-	
 	file_putc('\n');
-	
-	// file_putc('[');	file_write_buf((uint8_t*) str, strlen(str)); file_putc(']');
-	// file_putc('\n');
-	// file_putc('[');	file_write_buf((uint8_t*) svalue, strlen(svalue)); file_putc(']');
 }
 
 u8 load_u8(char* s, u8 min, u8 max)
 {
-	u8 index = 0, result = 0;
-	while (true)
-	{
-		if (s[index] == 0 || index > 254) break;
-		result = result * 10 + s[index++] - '0';
-	}
-	if (result < min) result = min; else if (result > max) result = max;
-	return result;
+    u8 index = 0, result = 0;
+    while (true)
+    {
+        if (s[index] == 0 || index > 254) break;
+        result = result * 10 + s[index++] - '0';
+    }
+    if (result < min) result = min; else if (result > max) result = max;
+    return result;
 }
 
 void load_u8_array(char* s, u8* array, u8 len, u8 min, u8 max)
 {
-	u8 index = 0, result = 0, arrayIndex = 0;
-	while (true)
-	{
-		if (s[index] == ',')
-		{
-			if (result < min) result = min; else if (result > max) result = max;
-			array[arrayIndex++] = result;
-		}
-		if (s[index] == 0 || index > 254)
-		{
-			if (result < min) result = min; else if (result > max) result = max;
-			array[arrayIndex++] = result;
-			break;
-		}
-		if (arrayIndex >= len) break;
-		result = result * 10 + s[index++] - '0';
-	}
-	for (u8 i = arrayIndex; i < len; i++) array[i] = 0;
+    u8 index = 0, result = 0, arrayIndex = 0;
+    while (true)
+    {
+        if (s[index] == 0 || index > 254)
+        {
+            if (result < min) result = min; else if (result > max) result = max;
+            array[arrayIndex++] = result;
+            break;
+        }
+        if (s[index] == ',')
+        {
+            if (result < min) result = min; else if (result > max) result = max;
+            array[arrayIndex++] = result;
+            if (arrayIndex >= len) break;
+            result = 0;
+        }
+        else
+        {
+            result = result * 10 + s[index] - '0';
+        }
+        index++;
+    }
+    for (u8 i = arrayIndex; i < len; i++) array[i] = 0;
 }
 
 void load_s8_array(char* s, s8* array, u8 len, s8 min, s8 max)
 {
-	u8 index = 0, arrayIndex = 0, minus;
-	s8 result = 0;
-	
-	while (true)
-	{
-		if (s[index] == '-')
-		{
-			minus = 1;
-		}
-		if (s[index] == ',')
-		{
-			if (minus) result = -result;
-			if (result < min) result = min; else if (result > max) result = max;
-			array[arrayIndex++] = result;
-			
-		}
-		if (s[index] == 0 || index > 254)
-		{
-			array[arrayIndex++] = minus ? -result : result;
-			break;
-		}
-		if (arrayIndex >= len) break;
-		result = result * 10 + s[index++] - '0';
-	}
-	for (u8 i = arrayIndex; i < len; i++) array[i] = 0;
+    u8 index = 0, arrayIndex = 0, minus = 0;
+    s8 result = 0;
+   
+    while (true)
+    {
+        if (s[index] == 0 || index > 254)
+        {
+            if (minus) result = -result;
+            if (result < min) result = min; else if (result > max) result = max;
+            array[arrayIndex++] = result;
+            break;
+        }
+        if (s[index] == ',')
+        {
+            if (minus) result = -result;
+            if (result < min) result = min; else if (result > max) result = max;
+            array[arrayIndex++] = result;
+            if (arrayIndex >= len) break;
+            result = 0; minus = 0;
+        }
+        else if (s[index] == '-')
+        {
+            minus = 1;
+        }
+        else
+        {
+            result = result * 10 + s[index] - '0';
+        }
+        index++;
+    }
+    for (u8 i = arrayIndex; i < len; i++) array[i] = 0;
 }
 
 u8 load_u8_bin(char* s, u8 min, u8 max)
 {
-	u8 len = strlen(s);
-	if (len == 0) return 0;
-	
-	u8 index = strlen(s) - 1, result = 0;
-	while (true)
-	{
-		result = (result << 1) | (s[index] & 1);
-		if (index == 0) break;
-		index--;
-	}
-	if (result < min) result = min; else if (result > max) result = max;
-	return result;
+    u8 len = strlen(s);
+    if (len == 0) return 0;
+   
+    u8 index = strlen(s) - 1, result = 0;
+    while (true)
+    {
+        result = (result << 1) | (s[index] != '0');
+        if (index == 0) break;
+        index--;
+    }
+    if (result < min) result = min; else if (result > max) result = max;
+    return result;
 }
 
 void load_u8_array_bin(char* s, u8* array, u8 len, u8 min, u8 max)
 {
-	for (u8 i = 0; i < len; i++) array[i] = 0;
-	
-	s16 index = strlen(s) - 1;
-	u8 result = 0, arrayIndex = len - 1;
-	while (index >= 0)
-	{
-		if (s[index] == ',')
-		{
-			if (result < min) result = min; else if (result > max) result = max;
-			array[arrayIndex] = result;
-			if (arrayIndex == 0) break;
-			arrayIndex--;
-		}
-		result = (result << 1) | (s[index] & 1);
-		if (index == 0)
-		{
-			if (result < min) result = min; else if (result > max) result = max;
-			array[arrayIndex] = result;
-			if (arrayIndex > 0) arrayIndex--;
-			break;
-		}
-		index--;
-	}
+    for (u8 i = 0; i < len; i++) array[i] = 0;
+    u8 slen = strlen(s);
+    if (slen == 0) return;
+
+    int index = slen - 1;
+    u8 result = 0, arrayIndex = len - 1;
+    while (true)
+    {
+        if (s[index] == ',')
+        {
+            if (result < min) result = min; else if (result > max) result = max;
+            array[arrayIndex] = result;
+            if (arrayIndex == 0) break;
+            arrayIndex--;
+            result = 0;
+        }
+        else
+        {
+            result = (result << 1) | (s[index] != '0');
+        }
+        if (index == 0)
+        {
+            if (result < min) result = min; else if (result > max) result = max;
+            array[arrayIndex] = result;
+            break;
+        }
+        index--;
+    }
 }
 
 void process_line()
 {
-	gridParam = DEBUG; debug[2] = debug[3] = 255;
 	if (!strcmp(str, "bank"))
 	{
 		bankToLoad = load_u8(svalue, 1, 8) - 1;
-		debug[0] = bankToLoad;
 	}
 	else if (!strcmp(str, "preset"))
 	{
 		presetToLoad = load_u8(svalue, 1, 8) - 1;
-		debug[1] = presetToLoad;
 	}
 	else if (!strcmp(str, "div"))
 		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].divisor, 4, 1, 16);
-	/*
 	else if (!strcmp(str, "phase"))
-		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].phase, 4);
+		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].phase, 4, 0, 16);
 	else if (!strcmp(str, "reset"))
-		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].reset, 4);
+		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].reset, 4, 0, 16);
 	else if (!strcmp(str, "chance"))
-		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].chance, 4);
+		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].chance, 4, 0, 16);
 	else if (!strcmp(str, "weight"))
-		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].weight, 4);
+		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].weight, 4, 1, 8);
 	else if (!strcmp(str, "gatetype"))
-		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].gateType, 4);
+		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].gateType, 4, 0, 2);
 	else if (!strcmp(str, "gatemuted"))
-		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].gateMuted, 4);
+		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].gateMuted, 4, 0, 1);
 	else if (!strcmp(str, "gateand/or"))
-		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].gateLogic, 4);
+		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].gateLogic, 4, 0, 1);
 	else if (!strcmp(str, "gatenot"))
-		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].gateNot, 4);
+		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].gateNot, 4, 0, 1);
 	else if (!strcmp(str, "gatetracks"))
-		load_u8_array_bin(svalue, banks[bankToLoad].presets[presetToLoad].gateTracks, 4);
+		load_u8_array_bin(svalue, banks[bankToLoad].presets[presetToLoad].gateTracks, 4, 0, 15);
 	else if (!strcmp(str, "selectedscale"))
-		banks[bankToLoad].presets[presetToLoad].scale = load_u8(svalue) - 1;
+		banks[bankToLoad].presets[presetToLoad].scale = load_u8(svalue, 1, 16) - 1;
 	else if (!strcmp(str, "scale1"))
-		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].scales[0], 16);
+		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].scales[0], 16, 0, NOTEMAX - 1);
 	else if (!strcmp(str, "scale2"))
-		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].scales[1], 16);
+		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].scales[1], 16, 0, NOTEMAX - 1);
 	else if (!strcmp(str, "scale3"))
-		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].scales[2], 16);
+		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].scales[2], 16, 0, NOTEMAX - 1);
 	else if (!strcmp(str, "scale4"))
-		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].scales[3], 16);
+		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].scales[3], 16, 0, NOTEMAX - 1);
 	else if (!strcmp(str, "scale5"))
-		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].scales[4], 16);
+		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].scales[4], 16, 0, NOTEMAX - 1);
 	else if (!strcmp(str, "scale6"))
-		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].scales[5], 16);
+		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].scales[5], 16, 0, NOTEMAX - 1);
 	else if (!strcmp(str, "scale7"))
-		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].scales[6], 16);
+		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].scales[6], 16, 0, NOTEMAX - 1);
 	else if (!strcmp(str, "scale8"))
-		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].scales[7], 16);
+		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].scales[7], 16, 0, NOTEMAX - 1);
 	else if (!strcmp(str, "scale9"))
-		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].scales[8], 16);
+		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].scales[8], 16, 0, NOTEMAX - 1);
 	else if (!strcmp(str, "scale10"))
-		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].scales[9], 16);
+		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].scales[9], 16, 0, NOTEMAX - 1);
 	else if (!strcmp(str, "scale11"))
-		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].scales[10], 16);
+		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].scales[10], 16, 0, NOTEMAX - 1);
 	else if (!strcmp(str, "scale12"))
-		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].scales[11], 16);
+		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].scales[11], 16, 0, NOTEMAX - 1);
 	else if (!strcmp(str, "scale13"))
-		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].scales[12], 16);
+		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].scales[12], 16, 0, NOTEMAX - 1);
 	else if (!strcmp(str, "scale14"))
-		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].scales[13], 16);
+		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].scales[13], 16, 0, NOTEMAX - 1);
 	else if (!strcmp(str, "scale15"))
-		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].scales[14], 16);
+		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].scales[14], 16, 0, NOTEMAX - 1);
 	else if (!strcmp(str, "scale16"))
-		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].scales[15], 16);
+		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].scales[15], 16, 0, NOTEMAX - 1);
 	else if (!strcmp(str, "tracksforcva"))
-		banks[bankToLoad].presets[presetToLoad].mixerA = load_u8_bin(svalue);
+		banks[bankToLoad].presets[presetToLoad].mixerA = load_u8_bin(svalue, 0, 15);
 	else if (!strcmp(str, "tracksforcvb"))
-		banks[bankToLoad].presets[presetToLoad].mixerB = load_u8_bin(svalue);
+		banks[bankToLoad].presets[presetToLoad].mixerB = load_u8_bin(svalue, 0, 15);
 	else if (!strcmp(str, "onforcva"))
-		banks[bankToLoad].presets[presetToLoad].alwaysOnA = load_u8_bin(svalue);
+		banks[bankToLoad].presets[presetToLoad].alwaysOnA = load_u8_bin(svalue, 0, 15);
 	else if (!strcmp(str, "onforcvb"))
-		banks[bankToLoad].presets[presetToLoad].alwaysOnB = load_u8_bin(svalue);
+		banks[bankToLoad].presets[presetToLoad].alwaysOnB = load_u8_bin(svalue, 0, 15);
 	else if (!strcmp(str, "rotatescale"))
-		load_s8_array(svalue, banks[bankToLoad].presets[presetToLoad].rotateScale, 16);
+		load_s8_array(svalue, banks[bankToLoad].presets[presetToLoad].rotateScale, 16, -2, 2);
 	else if (!strcmp(str, "rotateweights"))
-		load_s8_array(svalue, banks[bankToLoad].presets[presetToLoad].rotateWeights, 16);
+		load_s8_array(svalue, banks[bankToLoad].presets[presetToLoad].rotateWeights, 16, -2, 2);
 	else if (!strcmp(str, "mutate"))
-		load_u8_array_bin(svalue, banks[bankToLoad].presets[presetToLoad].mutateSeq, 16);
+		load_u8_array_bin(svalue, banks[bankToLoad].presets[presetToLoad].mutateSeq, 16, 0, 255);
 	else if (!strcmp(str, "globalreset"))
-		banks[bankToLoad].presets[presetToLoad].globalReset = load_u8(svalue);
+		banks[bankToLoad].presets[presetToLoad].globalReset = load_u8(svalue, 0, 64);
 	else if (!strcmp(str, "arcdivset"))
-		{ banks[bankToLoad].presets[presetToLoad].divisorArc = load_u8(svalue) - 1; banks[bankToLoad].presets[presetToLoad].isDivisorArc = 0; }
+		{ banks[bankToLoad].presets[presetToLoad].divisorArc = load_u8(svalue, 1, 16) - 1; banks[bankToLoad].presets[presetToLoad].isDivisorArc = 0; }
 	else if (!strcmp(str, "arcphaseset"))
-		{ banks[bankToLoad].presets[presetToLoad].phaseArc = load_u8(svalue) - 1; banks[bankToLoad].presets[presetToLoad].isPhaseArc = 0; }
+		{ banks[bankToLoad].presets[presetToLoad].phaseArc = load_u8(svalue, 1, 16) - 1; banks[bankToLoad].presets[presetToLoad].isPhaseArc = 0; }
 	else if (!strcmp(str, "arccvset"))
-		{ banks[bankToLoad].presets[presetToLoad].mixerArc = load_u8(svalue) - 1; banks[bankToLoad].presets[presetToLoad].isMixerArc = 0; }
+		{ banks[bankToLoad].presets[presetToLoad].mixerArc = load_u8(svalue, 1, 16) - 1; banks[bankToLoad].presets[presetToLoad].isMixerArc = 0; }
 	else if (!strcmp(str, "currentpreset"))
-		banks[bankToLoad].cp = load_u8(svalue) - 1;
+		banks[bankToLoad].cp = load_u8(svalue, 1, 8) - 1;
 	else if (!strcmp(str, "currentbank"))
-		cb = load_u8(svalue) - 1;
+		cb = load_u8(svalue, 1, 8) - 1;
 	else if (!strcmp(str, "sharedscale1"))
-		load_u8_array(svalue, userScalePresets[0], 16);
+		load_u8_array(svalue, userScalePresets[0], 16, 0, NOTEMAX - 1);
 	else if (!strcmp(str, "sharedscale2"))
-		load_u8_array(svalue, userScalePresets[1], 16);
+		load_u8_array(svalue, userScalePresets[1], 16, 0, NOTEMAX - 1);
 	else if (!strcmp(str, "sharedscale3"))
-		load_u8_array(svalue, userScalePresets[2], 16);
+		load_u8_array(svalue, userScalePresets[2], 16, 0, NOTEMAX - 1);
 	else if (!strcmp(str, "sharedscale4"))
-		load_u8_array(svalue, userScalePresets[3], 16);
+		load_u8_array(svalue, userScalePresets[3], 16, 0, NOTEMAX - 1);
 	else if (!strcmp(str, "sharedscale5"))
-		load_u8_array(svalue, userScalePresets[4], 16);
+		load_u8_array(svalue, userScalePresets[4], 16, 0, NOTEMAX - 1);
 	else if (!strcmp(str, "sharedscale6"))
-		load_u8_array(svalue, userScalePresets[5], 16);
+		load_u8_array(svalue, userScalePresets[5], 16, 0, NOTEMAX - 1);
 	else if (!strcmp(str, "sharedscale7"))
-		load_u8_array(svalue, userScalePresets[6], 16);
+		load_u8_array(svalue, userScalePresets[6], 16, 0, NOTEMAX - 1);
 	else if (!strcmp(str, "sharedscale8"))
-		load_u8_array(svalue, userScalePresets[7], 16);
+		load_u8_array(svalue, userScalePresets[7], 16, 0, NOTEMAX - 1);
 	else if (!strcmp(str, "sharedscale9"))
-		load_u8_array(svalue, userScalePresets[8], 16);
+		load_u8_array(svalue, userScalePresets[8], 16, 0, NOTEMAX - 1);
 	else if (!strcmp(str, "sharedscale10"))
-		load_u8_array(svalue, userScalePresets[9], 16);
+		load_u8_array(svalue, userScalePresets[9], 16, 0, NOTEMAX - 1);
 	else if (!strcmp(str, "sharedscale11"))
-		load_u8_array(svalue, userScalePresets[10], 16);
+		load_u8_array(svalue, userScalePresets[10], 16, 0, NOTEMAX - 1);
 	else if (!strcmp(str, "sharedscale12"))
-		load_u8_array(svalue, userScalePresets[11], 16);
+		load_u8_array(svalue, userScalePresets[11], 16, 0, NOTEMAX - 1);
 	else if (!strcmp(str, "sharedscale13"))
-		load_u8_array(svalue, userScalePresets[12], 16);
+		load_u8_array(svalue, userScalePresets[12], 16, 0, NOTEMAX - 1);
 	else if (!strcmp(str, "sharedscale14"))
-		load_u8_array(svalue, userScalePresets[13], 16);
+		load_u8_array(svalue, userScalePresets[13], 16, 0, NOTEMAX - 1);
 	else if (!strcmp(str, "sharedscale15"))
-		load_u8_array(svalue, userScalePresets[14], 16);
+		load_u8_array(svalue, userScalePresets[14], 16, 0, NOTEMAX - 1);
 	else if (!strcmp(str, "sharedscale16"))
-		load_u8_array(svalue, userScalePresets[15], 16);
+		load_u8_array(svalue, userScalePresets[15], 16, 0, NOTEMAX - 1);
 	else if (!strcmp(str, "arcdivsets1"))
-		load_u8_array(svalue, divisor_presets[0], 4);
+		load_u8_array(svalue, divisor_presets[0], 4, 1, 16);
 	else if (!strcmp(str, "arcdivsets2"))
-		load_u8_array(svalue, divisor_presets[1], 4);
+		load_u8_array(svalue, divisor_presets[1], 4, 1, 16);
 	else if (!strcmp(str, "arcdivsets3"))
-		load_u8_array(svalue, divisor_presets[2], 4);
+		load_u8_array(svalue, divisor_presets[2], 4, 1, 16);
 	else if (!strcmp(str, "arcdivsets4"))
-		load_u8_array(svalue, divisor_presets[3], 4);
+		load_u8_array(svalue, divisor_presets[3], 4, 1, 16);
 	else if (!strcmp(str, "arcdivsets5"))
-		load_u8_array(svalue, divisor_presets[4], 4);
+		load_u8_array(svalue, divisor_presets[4], 4, 1, 16);
 	else if (!strcmp(str, "arcdivsets6"))
-		load_u8_array(svalue, divisor_presets[5], 4);
+		load_u8_array(svalue, divisor_presets[5], 4, 1, 16);
 	else if (!strcmp(str, "arcdivsets7"))
-		load_u8_array(svalue, divisor_presets[6], 4);
+		load_u8_array(svalue, divisor_presets[6], 4, 1, 16);
 	else if (!strcmp(str, "arcdivsets8"))
-		load_u8_array(svalue, divisor_presets[7], 4);
+		load_u8_array(svalue, divisor_presets[7], 4, 1, 16);
 	else if (!strcmp(str, "arcdivsets9"))
-		load_u8_array(svalue, divisor_presets[8], 4);
+		load_u8_array(svalue, divisor_presets[8], 4, 1, 16);
 	else if (!strcmp(str, "arcdivsets10"))
-		load_u8_array(svalue, divisor_presets[9], 4);
+		load_u8_array(svalue, divisor_presets[9], 4, 1, 16);
 	else if (!strcmp(str, "arcdivsets11"))
-		load_u8_array(svalue, divisor_presets[10], 4);
+		load_u8_array(svalue, divisor_presets[10], 4, 1, 16);
 	else if (!strcmp(str, "arcdivsets12"))
-		load_u8_array(svalue, divisor_presets[11], 4);
+		load_u8_array(svalue, divisor_presets[11], 4, 1, 16);
 	else if (!strcmp(str, "arcdivsets13"))
-		load_u8_array(svalue, divisor_presets[12], 4);
+		load_u8_array(svalue, divisor_presets[12], 4, 1, 16);
 	else if (!strcmp(str, "arcdivsets14"))
-		load_u8_array(svalue, divisor_presets[13], 4);
+		load_u8_array(svalue, divisor_presets[13], 4, 1, 16);
 	else if (!strcmp(str, "arcdivsets15"))
-		load_u8_array(svalue, divisor_presets[14], 4);
+		load_u8_array(svalue, divisor_presets[14], 4, 1, 16);
 	else if (!strcmp(str, "arcdivsets16"))
-		load_u8_array(svalue, divisor_presets[15], 4);
+		load_u8_array(svalue, divisor_presets[15], 4, 1, 16);
 	else if (!strcmp(str, "arcphasesets1"))
-		load_u8_array(svalue, phase_presets[0], 4);
+		load_u8_array(svalue, phase_presets[0], 4, 0, 16);
 	else if (!strcmp(str, "arcphasesets2"))
-		load_u8_array(svalue, phase_presets[1], 4);
+		load_u8_array(svalue, phase_presets[1], 4, 0, 16);
 	else if (!strcmp(str, "arcphasesets3"))
-		load_u8_array(svalue, phase_presets[2], 4);
+		load_u8_array(svalue, phase_presets[2], 4, 0, 16);
 	else if (!strcmp(str, "arcphasesets4"))
-		load_u8_array(svalue, phase_presets[3], 4);
+		load_u8_array(svalue, phase_presets[3], 4, 0, 16);
 	else if (!strcmp(str, "arcphasesets5"))
-		load_u8_array(svalue, phase_presets[4], 4);
+		load_u8_array(svalue, phase_presets[4], 4, 0, 16);
 	else if (!strcmp(str, "arcphasesets6"))
-		load_u8_array(svalue, phase_presets[5], 4);
+		load_u8_array(svalue, phase_presets[5], 4, 0, 16);
 	else if (!strcmp(str, "arcphasesets7"))
-		load_u8_array(svalue, phase_presets[6], 4);
+		load_u8_array(svalue, phase_presets[6], 4, 0, 16);
 	else if (!strcmp(str, "arcphasesets8"))
-		load_u8_array(svalue, phase_presets[7], 4);
+		load_u8_array(svalue, phase_presets[7], 4, 0, 16);
 	else if (!strcmp(str, "arcphasesets9"))
-		load_u8_array(svalue, phase_presets[8], 4);
+		load_u8_array(svalue, phase_presets[8], 4, 0, 16);
 	else if (!strcmp(str, "arcphasesets10"))
-		load_u8_array(svalue, phase_presets[9], 4);
+		load_u8_array(svalue, phase_presets[9], 4, 0, 16);
 	else if (!strcmp(str, "arcphasesets11"))
-		load_u8_array(svalue, phase_presets[10], 4);
+		load_u8_array(svalue, phase_presets[10], 4, 0, 16);
 	else if (!strcmp(str, "arcphasesets12"))
-		load_u8_array(svalue, phase_presets[11], 4);
+		load_u8_array(svalue, phase_presets[11], 4, 0, 16);
 	else if (!strcmp(str, "arcphasesets13"))
-		load_u8_array(svalue, phase_presets[12], 4);
+		load_u8_array(svalue, phase_presets[12], 4, 0, 16);
 	else if (!strcmp(str, "arcphasesets14"))
-		load_u8_array(svalue, phase_presets[13], 4);
+		load_u8_array(svalue, phase_presets[13], 4, 0, 16);
 	else if (!strcmp(str, "arcphasesets15"))
-		load_u8_array(svalue, phase_presets[14], 4);
+		load_u8_array(svalue, phase_presets[14], 4, 0, 16);
 	else if (!strcmp(str, "arcphasesets16"))
-		load_u8_array(svalue, phase_presets[15], 4);
+		load_u8_array(svalue, phase_presets[15], 4, 0, 16);
 	else if (!strcmp(str, "arccvsets1"))
-		load_u8_array_bin(svalue, mixer_presets[0], 2);
+		load_u8_array_bin(svalue, mixer_presets[0], 2, 0, 15);
 	else if (!strcmp(str, "arccvsets2"))
-		load_u8_array_bin(svalue, mixer_presets[1], 2);
+		load_u8_array_bin(svalue, mixer_presets[1], 2, 0, 15);
 	else if (!strcmp(str, "arccvsets3"))
-		load_u8_array_bin(svalue, mixer_presets[2], 2);
+		load_u8_array_bin(svalue, mixer_presets[2], 2, 0, 15);
 	else if (!strcmp(str, "arccvsets4"))
-		load_u8_array_bin(svalue, mixer_presets[3], 2);
+		load_u8_array_bin(svalue, mixer_presets[3], 2, 0, 15);
 	else if (!strcmp(str, "arccvsets5"))
-		load_u8_array_bin(svalue, mixer_presets[4], 2);
+		load_u8_array_bin(svalue, mixer_presets[4], 2, 0, 15);
 	else if (!strcmp(str, "arccvsets6"))
-		load_u8_array_bin(svalue, mixer_presets[5], 2);
+		load_u8_array_bin(svalue, mixer_presets[5], 2, 0, 15);
 	else if (!strcmp(str, "arccvsets7"))
-		load_u8_array_bin(svalue, mixer_presets[6], 2);
+		load_u8_array_bin(svalue, mixer_presets[6], 2, 0, 15);
 	else if (!strcmp(str, "arccvsets8"))
-		load_u8_array_bin(svalue, mixer_presets[7], 2);
+		load_u8_array_bin(svalue, mixer_presets[7], 2, 0, 15);
 	else if (!strcmp(str, "arccvsets9"))
-		load_u8_array_bin(svalue, mixer_presets[8], 2);
+		load_u8_array_bin(svalue, mixer_presets[8], 2, 0, 15);
 	else if (!strcmp(str, "arccvsets10"))
-		load_u8_array_bin(svalue, mixer_presets[9], 2);
+		load_u8_array_bin(svalue, mixer_presets[9], 2, 0, 15);
 	else if (!strcmp(str, "arccvsets11"))
-		load_u8_array_bin(svalue, mixer_presets[10], 2);
+		load_u8_array_bin(svalue, mixer_presets[10], 2, 0, 15);
 	else if (!strcmp(str, "arccvsets12"))
-		load_u8_array_bin(svalue, mixer_presets[11], 2);
+		load_u8_array_bin(svalue, mixer_presets[11], 2, 0, 15);
 	else if (!strcmp(str, "arccvsets13"))
-		load_u8_array_bin(svalue, mixer_presets[12], 2);
+		load_u8_array_bin(svalue, mixer_presets[12], 2, 0, 15);
 	else if (!strcmp(str, "arccvsets14"))
-		load_u8_array_bin(svalue, mixer_presets[13], 2);
+		load_u8_array_bin(svalue, mixer_presets[13], 2, 0, 15);
 	else if (!strcmp(str, "arccvsets15"))
-		load_u8_array_bin(svalue, mixer_presets[14], 2);
+		load_u8_array_bin(svalue, mixer_presets[14], 2, 0, 15);
 	else if (!strcmp(str, "arccvsets16"))
-		load_u8_array_bin(svalue, mixer_presets[15], 2);*/
+		load_u8_array_bin(svalue, mixer_presets[15], 2, 0, 15);	
 }
 
 static void usb_stick_load()

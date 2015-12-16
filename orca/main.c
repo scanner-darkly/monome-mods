@@ -2115,31 +2115,35 @@ static void handler_MonomeGridKey(s32 data)
 			
 			if (y == 6)
 			{
-				if (scalePresetPressed != 16)
+				if (scalePresetPressed != 16) // copy from a scale preset to a shared scale
 				{
 					for (u8 i = 0; i < 16; i++) userScalePresets[x][i] = SCALE_PRESETS[scalePresetPressed][i];
 				}
-				else if (userScalePressed != 16)
+				else if (userScalePressed != 16) // copy from a user scale to a shared scale
 				{
 					for (u8 i = 0; i < 16; i++) userScalePresets[x][i] = scales[userScalePressed][i];
 				}
-				else
+				else // copy from a shared scale into currently selected user scale
 				{
 					for (u8 i = 0; i < 16; i++) banks[cb].presets[banks[cb].cp].scales[scale][i] = scales[scale][i] = userScalePresets[x][i];
 				}
-				redraw();
-				return;
 			}
-			
-			if (y == 5)
+			else if (y == 5) // copy from a scale preset into currently selected user scale
 			{
 				for (u8 i = 0; i < 16; i++) banks[cb].presets[banks[cb].cp].scales[scale][i] = scales[scale][i] = SCALE_PRESETS[x][i];
 				scalePresetPressed = x;
 			}
 			else if (y == 7)
 			{
-				banks[cb].presets[banks[cb].cp].scale = scale = x;
-				userScalePressed = x;
+				if (userScalePressed != 16) // copy from one user scale to another
+				{
+					for (u8 i = 0; i < 16; i++) banks[cb].presets[banks[cb].cp].scales[x][i] = scales[x][i] = banks[cb].presets[banks[cb].cp].scales[userScalePressed][i];
+				}
+				else // select a user scale
+				{
+					banks[cb].presets[banks[cb].cp].scale = scale = x;
+					userScalePressed = x;
+				}
 			}
 			redraw();
 			return;

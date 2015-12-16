@@ -199,7 +199,7 @@ u16 counter[4] = {0, 0, 0, 0};
 u8 triggerOn[4] = {0, 0, 0, 0};
 u16 prevOn[4] = {0, 0, 0, 0};
 u8 flashConfirmation = 0;
-u8 showTriggersG = 0, showRandomized = 0, bankToShow = 8, presetToShow = 8, presetPressed = 8, bankPressed = 8, notePressedIndex = 12;
+u8 showTriggersG = 0, showRandomized = 0, bankToShow = 8, presetToShow = 8, presetPressed = 8, bankPressed = 8, notePressedIndex = 12, noteSquarePressedRow = 4, noteSquarePressedCol = 4;
 u8 showTriggers[4] = {0, 0, 0, 0};
 u8 scalePressed = 0, scalePresetPressed = 16, userScalePressed = 16, presetModePressed = 0;
 u8 prevXPressed = 16, prevXReleased = 16, prevYPressed = 8, prevYReleased = 8;
@@ -477,7 +477,7 @@ void redrawGrid(void)
                 {
                     current = counter[seq] + (divisor[seq] << 6) - phase[seq];
                     currentOn = (current / divisor[seq]) & 1;
-                    if (currentOn && ((alwaysOnA | mixerA) & (1 << seq))) cvA += weight[seq];
+					if ((alwaysOnA & (1 << seq)) | (currentOn && (mixerA & (1 << seq)))) cvA += weight[seq];
                 }
                 cvA &= 0xf;
                 
@@ -1903,6 +1903,11 @@ static void handler_MonomeGridKey(s32 data)
 		{
 			notePressedIndex = 12;
 		}
+		
+		if (noteSquarePressedCol == x && noteSquarePressedRow == y - 4)
+		{
+			noteSquarePressedCol = noteSquarePressedRow = 4;
+		}
 
 		return;
 	}
@@ -1927,6 +1932,60 @@ static void handler_MonomeGridKey(s32 data)
 			redraw();
 			return;
 		}
+	}
+	
+	if (noteSquarePressedCol < 4 && gridParam == SCALE) // octave / semitone shift for a full row
+	{
+		u8 can = 1, ni = noteSquarePressedRow << 2;
+		if (noteSquarePressedCol == x)
+		{
+			if (y - 4 - noteSquarePressedRow == 2) // octave down
+			{
+				for (u8 i = 0; i < 4; i++) if (scales[scale][ni+i] < 12) { can = 0; break; }
+				if (can) for (u8 i = 0; i < 4; i++) { banks[cb].presets[banks[cb].cp].scales[scale][ni+i] -= 12; scales[scale][ni+i] -= 12; }
+			}
+			else if (noteSquarePressedRow - y + 4 == 2) // octave up
+			{
+				for (u8 i = 0; i < 4; i++) if (scales[scale][ni+i] >= NOTEMAX - 12) { can = 0; break; }
+				if (can) for (u8 i = 0; i < 4; i++) { banks[cb].presets[banks[cb].cp].scales[scale][ni+i] += 12; scales[scale][ni+i] += 12; }
+			}
+			else if (y - 4 - noteSquarePressedRow == 1) // semitone down
+			{
+				for (u8 i = 0; i < 4; i++) if (scales[scale][ni+i] == 0) { can = 0; break; }
+				if (can) for (u8 i = 0; i < 4; i++) { banks[cb].presets[banks[cb].cp].scales[scale][ni+i]--; scales[scale][ni+i]--; }
+			}
+			else if (noteSquarePressedRow - y + 4 == 1) // semitone up
+			{
+				for (u8 i = 0; i < 4; i++) if (scales[scale][ni+i] == NOTEMAX - 1) { can = 0; break; }
+				if (can) for (u8 i = 0; i < 4; i++) { banks[cb].presets[banks[cb].cp].scales[scale][ni+i]++; scales[scale][ni+i]++; }
+			}
+		}
+		else if (noteSquarePressedRow == y - 4)
+		{
+			if (noteSquarePressedCol - x == 2) // octave down
+			{
+				for (u8 i = 0; i < 4; i++) if (scales[scale][ni+i] < 12) { can = 0; break; }
+				if (can) for (u8 i = 0; i < 4; i++) { banks[cb].presets[banks[cb].cp].scales[scale][ni+i] -= 12; scales[scale][ni+i] -= 12; }
+			}
+			else if (x - noteSquarePressedCol == 2) // octave up
+			{
+				for (u8 i = 0; i < 4; i++) if (scales[scale][ni+i] >= NOTEMAX - 12) { can = 0; break; }
+				if (can) for (u8 i = 0; i < 4; i++) { banks[cb].presets[banks[cb].cp].scales[scale][ni+i] += 12; scales[scale][ni+i] += 12; }
+			}
+			else if (noteSquarePressedCol - x == 1) // semitone down
+			{
+				for (u8 i = 0; i < 4; i++) if (scales[scale][ni+i] == 0) { can = 0; break; }
+				if (can) for (u8 i = 0; i < 4; i++) { banks[cb].presets[banks[cb].cp].scales[scale][ni+i]--; scales[scale][ni+i]--; }
+			}
+			else if (x - noteSquarePressedCol == 1) // semitone up
+			{
+				for (u8 i = 0; i < 4; i++) if (scales[scale][ni+i] == NOTEMAX - 1) { can = 0; break; }
+				if (can) for (u8 i = 0; i < 4; i++) { banks[cb].presets[banks[cb].cp].scales[scale][ni+i]++; scales[scale][ni+i]++; }
+			}
+		}
+		if (isScalePreview) updateCVOutputs(0);
+		redraw();
+		return;
 	}
 	
 	u8 doublePress = prevXPressed == prevXReleased && prevXReleased == x && prevYPressed == prevYReleased && prevYReleased == y;
@@ -2088,8 +2147,8 @@ static void handler_MonomeGridKey(s32 data)
 		
 		if (x < 4)
 		{
-			currentScaleRow = y - 4;
-			currentScaleColumn = x;
+			noteSquarePressedRow = currentScaleRow = y - 4;
+			noteSquarePressedCol = currentScaleColumn = x;
             prevSelectedScaleColumn = 4;
             
 			if (isScalePreview) updateCVOutputs(0);

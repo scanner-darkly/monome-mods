@@ -925,7 +925,7 @@ void updateTriggerOutputs(u8 fromClock)
 				if (trackIncluded && (!fromClock || chance[seq] < ((rnd() % 20)+1))) t |= gateType[trig] == 2 ? currentOn[seq] : trigOn;
 			}
 		}
-		if (gateNot[0]) t = !t;
+		if (gateNot[trig]) t = !t;
 		
 		if (gateType[trig] != 2 && t)
 		{

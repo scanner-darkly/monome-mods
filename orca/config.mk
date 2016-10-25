@@ -40,7 +40,7 @@
 THIS = orca
 
 # Path to top level ASF directory relative to this project directory.
-PRJ_PATH = ../../mod/xdk-asf-3.17.0
+PRJ_PATH = ../libavr32/asf
 
 # Target CPU architecture: ap, ucr1, ucr2 or ucr3
 ARCH = ucr1
@@ -62,20 +62,22 @@ TARGET = $(THIS).elf
 
 # List of C source files.
 CSRCS = \
-       ../../monome-mods/$(THIS)/main.c    \
-       ../../mod/skeleton/adc.c     \
-       ../../mod/skeleton/events.c     \
-       ../../mod/skeleton/i2c.c     \
-       ../../mod/skeleton/init.c \
-       ../../mod/skeleton/interrupts.c \
-       ../../mod/skeleton/monome.c \
-       ../../mod/skeleton/timers.c \
-       ../../mod/skeleton/usb.c \
-       ../../mod/skeleton/util.c \
-       ../../mod/skeleton/usb/ftdi/ftdi.c \
-       ../../mod/skeleton/usb/ftdi/uhi_ftdi.c \
-       ../../mod/skeleton/usb/hid/hid.c \
-       ../../mod/skeleton/usb/hid/uhi_hid.c \
+       ../../monome-mods/$(THIS)/main.c \
+       ../libavr32/src/adc.c     \
+       ../libavr32/src/events.c     \
+       ../libavr32/src/i2c.c     \
+       ../libavr32/src/init_trilogy.c \
+       ../libavr32/src/init_common.c \
+       ../libavr32/src/monome.c \
+       ../libavr32/src/timers.c \
+       ../libavr32/src/usb.c \
+       ../libavr32/src/util.c \
+       ../libavr32/src/usb/ftdi/ftdi.c \
+       ../libavr32/src/usb/ftdi/uhi_ftdi.c \
+       ../libavr32/src/usb/hid/hid.c \
+       ../libavr32/src/usb/hid/uhi_hid.c \
+       ../libavr32/src/usb/midi/uhi_midi.c \
+       ../libavr32/src/usb/midi/midi.c \
        avr32/drivers/adc/adc.c                            \
        avr32/drivers/flashc/flashc.c                      \
        avr32/drivers/gpio/gpio.c                          \
@@ -109,12 +111,13 @@ ASSRCS = \
 # List of include paths.
 INC_PATH = \
        ../../monome-mods/$(THIS)           \
-       ../skeleton                                        \
-       ../skeleton/conf      \
-       ../skeleton/usb \
-       ../skeleton/usb/ftdi \
-       ../skeleton/usb/hid \
-       ../teletype \
+       ../src                                        \
+       ../conf      \
+       ../conf/trilogy \
+       ../src/usb \
+       ../src/usb/ftdi \
+       ../src/usb/hid \
+       ../src/usb/midi \
        avr32/boards                                       \
        avr32/drivers/cpu/cycle_counter                    \
        avr32/drivers/flashc                               \
@@ -129,7 +132,7 @@ INC_PATH = \
        avr32/utils                                        \
        avr32/utils/debug                                  \
        avr32/utils/preprocessor                           \
-	   avr32/services/fs/fat                              \
+       avr32/services/fs/fat                              \
        common/boards                                      \
        common/boards/user_board \
        common/services/storage/ctrl_access                \
@@ -154,7 +157,7 @@ LIBS =
 # Path relative to top level directory pointing to a linker script.
 # LINKER_SCRIPT = avr32/utils/linker_scripts/at32uc3b/0256/gcc/link_uc3b0256.lds
 # LINKER_SCRIPT = avr32/drivers/flashc/flash_example/at32uc3b0256_evk1101/link_uc3b0256.lds
-LINKER_SCRIPT = ../../mod/skeleton/link_uc3b0256.lds
+LINKER_SCRIPT = ../../libavr32/src/link_uc3b0256.lds
 
 
 # Additional options for debugging. By default the common Makefile.in will

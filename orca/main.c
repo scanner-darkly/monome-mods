@@ -26,8 +26,8 @@
 #include "types.h"
 #include "events.h"
 #include "i2c.h"
-#include "init.h"
-#include "interrupts.h"
+#include "init_trilogy.h"
+#include "init_common.h"
 #include "monome.h"
 #include "timers.h"
 #include "adc.h"
@@ -63,6 +63,7 @@
 #define DEBUG 13
 
 #define CLOCK_DIV_MULT_COUNT 15
+#define AVERAGING_TAPS 3
 
 const s8 CLOCK_DIV_MULT[CLOCK_DIV_MULT_COUNT] = {-8, -7, -6, -5, -4, -3, -2, 1, 2, 3, 4, 5, 6, 7, 8};
 
@@ -164,6 +165,12 @@ const u8 MIXER_PRESETS[16][2] =
 };
 
 const u8 TRIGGERS[4] = {B00, B01, B02, B03};
+
+static const u64 tcMax = (U64)0x7fffffff;
+u64 last_external_ticks = 0;
+u32 external_clock_pulse_width;
+u32 external_taps[AVERAGING_TAPS];
+u8 external_taps_index, external_taps_count;
 
 u8 clock_interval_index = 0;
 s8 clock_div_mult = 1;
@@ -268,8 +275,8 @@ typedef void(*trigger_c)(void* o);
 ////////////////////////////////////////////////////////////////////////////////
 // prototypes
 
+u32 get_external_clock_average(void);
 static void clock(u8 phase);
-static void external_clock(u8 phase);
 static void recalculate_clock_intervals(void);
 
 // start/stop monome polling/refresh timers
@@ -284,7 +291,8 @@ static void handler_None(s32 data) { ;; }
 static void handler_KeyTimer(s32 data);
 static void handler_Front(s32 data);
 static void handler_ClockNormal(s32 data);
-static void orca_process_ii(uint8_t i, int d);
+static void handler_ClockExt(s32 data);
+static void orca_process_ii(uint8_t *data, uint8_t l);
 
 static void usb_stick_save(void);
 static void usb_stick_load(void);
@@ -1350,23 +1358,49 @@ void recalculate_clock_intervals(void) {
 	}
 	// TODO spread remainder evenly
 	clock_time = get_external_clock_average();
-	timer_reset(&clockTimer, clock_intervals[0]);
+	timer_reset_set(&clockTimer, clock_intervals[0]);
 	clock_interval_index = 1;
 }
  
-void external_clock(u8 phase) {
+u32 get_external_clock_average(void) {
+	if (external_taps_count == 0) return 500;
+	u64 total = 0;
+	for (u8 i = 0; i < external_taps_count; i++) total += external_taps[i];
+	return total / (u64)external_taps_count;
+}
+
+static void handler_ClockExt(s32 data) {
+	u64 elapsed = last_external_ticks < tcTicks ? tcTicks - last_external_ticks : tcMax - last_external_ticks + tcTicks;
+	if (data) {
+	    if (last_external_ticks != 0) {
+			if (elapsed < (u64)3600000) {
+				external_taps[external_taps_index] = elapsed;
+				if (++external_taps_index >= AVERAGING_TAPS) external_taps_index = 0;
+				if (external_taps_count < AVERAGING_TAPS) external_taps_count++;
+			}
+		}
+		last_external_ticks = tcTicks;
+	} else external_clock_pulse_width = elapsed;
+
 	if (clock_div_mult == 1) {
-		clock(phase);
+		clock(data);
 		return;
 	}
+
+	/*
+	gridParam = DEBUG;
+	debug[0] = tcTicks && 0xff;
+	debug[1] = last_external_ticks && 0xff;
+	debug[2] = external_taps_index;
+	*/
 		
 	if (clock_div_mult < 0) {
-		if (clock_interval_index < 2) clock(phase);
+		if (clock_interval_index < 2) clock(data);
 		if (++clock_interval_index >= (abs(clock_div_mult) << 1)) clock_interval_index = 0;
 		return;
 	}
 	
-	if (!phase) return;
+	if (!data) return;
 	
 	recalculate_clock_intervals();
 	clock(1);
@@ -1377,7 +1411,7 @@ static void clockTimer_callback(void* o) {
 		clock_interval_index = !clock_interval_index;
 		clock(clock_interval_index);
 	} else if (clock_div_mult > 1 && clock_interval_index) {
-		timer_reset(&clockTimer, clock_intervals[clock_interval_index]);
+		timer_reset_set(&clockTimer, clock_intervals[clock_interval_index]);
 		if (++clock_interval_index >= (clock_div_mult << 1)) clock_interval_index = 0;
 		clock(clock_interval_index & 1);
  	}
@@ -1654,14 +1688,26 @@ static void handler_KeyTimer(s32 data) {
 static void handler_ClockNormal(s32 data) {
 	clock_external = !gpio_get_pin_value(B09); 
 	clock_temp = 10000;
-	clock_interval_index = 0;	
+	clock_interval_index = 0;
+	if (clock_external) {
+		last_external_ticks = 0;
+		external_clock_pulse_width = 10;
+		external_taps_index = external_taps_count = 0;
+	} 
 }
 
-static void orca_process_ii(uint8_t i, int d)
+static void orca_process_ii(uint8_t *data, uint8_t l)
 {
+	uint8_t i;
+	int d;
+
+	i = data[0];
+	u32 d_ = (data[1] << 8) | data[2];
+	d = d_;
+    
     u8 ii;
     int _d;
-    
+
 	switch(i)
 	{
 		case ORCA_TRACK:
@@ -2591,6 +2637,7 @@ static inline void assign_main_event_handlers(void) {
 	app_event_handlers[ kEventKeyTimer ] = &handler_KeyTimer;
 	app_event_handlers[ kEventSaveFlash ] = &handler_SaveFlash;
 	app_event_handlers[ kEventClockNormal ] = &handler_ClockNormal;
+	app_event_handlers[ kEventClockExt ] = &handler_ClockExt;
 	app_event_handlers[ kEventFtdiConnect ]	= &handler_FtdiConnect ;
 	app_event_handlers[ kEventFtdiDisconnect ]	= &handler_FtdiDisconnect ;
 	app_event_handlers[ kEventMonomeConnect ]	= &handler_MonomeConnect ;
@@ -3559,7 +3606,6 @@ int main(void)
 	usb_stick(1);
 
 	process_ii = &orca_process_ii;
-	clock_pulse = &external_clock;
 	clock_external = !gpio_get_pin_value(B09);
 
 	triggerTimer_callbacks[0] = &triggerTimer0_callback;

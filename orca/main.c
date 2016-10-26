@@ -713,6 +713,19 @@ void redrawGrid(void)
 			
 	}
 	
+	if (valueToShow == 6) // show clock div/mult
+	{
+		for (u8 led = 0; led < 16; led++)
+		{
+			monomeLedBuffer[led+112] = 0;
+			if (clock_div_mult < 0) 
+				monomeLedBuffer[led+112] = led > 7 ? 0 : (led > 8 - abs(clock_div_mult) ? 15 : 0);
+			else
+				monomeLedBuffer[led+112] = led < 9 ? 0 : (led - 7 <= clock_div_mult ? 15 : 0);
+		}
+		monomeLedBuffer[120] = clock_div_mult == 1 ? 15 : 8;
+	}
+	
 	if (flashConfirmation == 1)
 	{
 		for (u8 i = 0; i < 8; i++)
@@ -796,6 +809,19 @@ void redrawArc(void)
 				monomeLedBuffer[led+64] = !(led & 3) ? 15 : ((led < ((scaleB + 1) << 2)) && (led >= (scaleB << 2)) ? 0 : 6);
 			}
 		}
+		if (valueToShow == 6) // show clock div/mult
+		{
+			for (u8 led = 0; led < 64; led++)
+			{
+				monomeLedBuffer[led] = 0;
+				if (clock_div_mult < 0) 
+					monomeLedBuffer[led] = 64 - led < abs(clock_div_mult) ? 15 : 0;
+				else
+					monomeLedBuffer[led] = led < clock_div_mult ? 15 : 0;
+			}
+			monomeLedBuffer[0] = clock_div_mult == 1 ? 15 : 8;
+		}
+		
 		// just so i can test on arc4
 		for (u8 led = 0; led < 64; led++)
 		{
@@ -844,6 +870,18 @@ void redrawArc(void)
 				monomeLedBuffer[led+64] = !(led & 3) ? 15 : ((led < ((scaleA + 1) << 2)) && (led >= (scaleA << 2)) ? 0 : 6);
 				monomeLedBuffer[led+128] = !(led & 3) ? 15 : ((led < ((scaleB + 1) << 2)) && (led >= (scaleB << 2)) ? 0 : 6);
 			}
+		}
+		if (valueToShow == 6) // show clock div/mult
+		{
+			for (u8 led = 0; led < 64; led++)
+			{
+				monomeLedBuffer[led] = 0;
+				if (clock_div_mult < 0) 
+					monomeLedBuffer[led] = 64 - led < abs(clock_div_mult) ? 15 : 0;
+				else
+					monomeLedBuffer[led] = led < clock_div_mult ? 15 : 0;
+			}
+			monomeLedBuffer[0] = clock_div_mult == 1 ? 15 : 8;
 		}
 	}
 	
@@ -1387,13 +1425,6 @@ static void handler_ClockExt(s32 data) {
 		return;
 	}
 
-	/*
-	gridParam = DEBUG;
-	debug[0] = tcTicks && 0xff;
-	debug[1] = last_external_ticks && 0xff;
-	debug[2] = external_taps_index;
-	*/
-		
 	if (clock_div_mult < 0) {
 		if (clock_interval_index < 2) clock(data);
 		if (++clock_interval_index >= (abs(clock_div_mult) << 1)) clock_interval_index = 0;
@@ -1644,6 +1675,7 @@ static void handler_PollADC(s32 data) {
 			if (clock_div_mult != CLOCK_DIV_MULT[div_index]) {
 				clock_div_mult = CLOCK_DIV_MULT[div_index];
 				clock_interval_index = clock_interval_index & 1;
+				showValue(6);
 			}
 		} else {
 			// 1000ms - 24ms

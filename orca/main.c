@@ -1383,18 +1383,21 @@ static softTimer_t monomeRefreshTimer  = { .next = NULL, .prev = NULL };
 static softTimer_t showValueTimer = { .next = NULL, .prev = NULL };
 
 void recalculate_clock_intervals(void) {
+	// this assumes clock_div_mult is > 0 (multiplication)
+	
 	u32 average = get_external_clock_average();
 	u32 pulse = external_clock_pulse_width;
-	u32 interval = average / (u32)clock_div_mult;
-	u32 remainder = average % (u32)clock_div_mult;
-	if (pulse > (interval >> 1)) pulse = interval >> 1;
+	u32 interval = (average << 4) / (u32)clock_div_mult;
+	if (pulse > (interval >> 5)) pulse = interval >> 5;
 	if (pulse == 0) pulse = 1;
 	
+	u32 carryover = 0;
 	for (u8 i = 0; i < (clock_div_mult << 1); i += 2) {
 		clock_intervals[i] = pulse;
-		clock_intervals[i + 1] = interval - pulse;
+		clock_intervals[i + 1] = ((interval + carryover) >> 4) - pulse;
+		carryover = (interval + carryover) & 15;
 	}
-	// TODO spread remainder evenly
+	
 	clock_time = get_external_clock_average();
 	timer_reset_set(&clockTimer, clock_intervals[0]);
 	clock_interval_index = 1;

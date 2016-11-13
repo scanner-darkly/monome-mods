@@ -98,10 +98,10 @@ const u16 CHROMATIC[NOTEMAX] = {
 
 const u8 DIVISOR_PRESETS[16][4] =
 {
-    {1, 2, 3, 4},
 	{1, 2, 4, 8},
-	{2, 4, 8, 16},
+    {1, 2, 3, 4},
 	{2, 3, 4, 5},
+	{3, 4, 5, 6},
 
     {2, 3, 5, 7},
     {2, 3, 5, 8},
@@ -113,10 +113,10 @@ const u8 DIVISOR_PRESETS[16][4] =
     {8, 5, 3, 2},
     {7, 5, 3, 2},
 
+    {6, 5, 4, 3},
     {5, 4, 3, 2},
-    {16, 8, 4, 2},
-    {8, 4, 2, 1},
-    {4, 3, 2, 1}
+    {4, 3, 2, 1},
+    {8, 4, 2, 1}
 };
 
 const u8 PHASE_PRESETS[16][4] =
@@ -144,7 +144,7 @@ const u8 PHASE_PRESETS[16][4] =
 
 const u8 MIXER_PRESETS[16][2] =
 {
-	{0b1110, 0b0001},
+	{0b1111, 0b1111},
 	{0b1101, 0b0010},
 	{0b1011, 0b0100},
 	{0b0111, 0b1000},
@@ -209,7 +209,7 @@ u8 arc2index = 0; // 0 - show tracks 1&2, 1 - show tracks 3&4, 2 - show scales
 u8 arc4index = 0; // 0 - show tracks, 1 - show values, 2 - show scales
 u8 isArc, isVb, isArc2;
 u8 gridParam = DIVISOR;
-u8 isDivisorArc = 0, isPhaseArc = 0, isMixerArc = 0;
+u8 isDivisorArc = 0, isPhaseArc = 0, isMixerArc = 0, arcNoteIndex = 0;
 u64 globalCounter = 0, globalLength;
 u16 counter[4] = {0, 0, 0, 0};
 u8 triggerOn[4] = {0, 0, 0, 0};
@@ -826,7 +826,7 @@ void redrawArc(void)
 			for (u8 led = 0; led < 64; led++)
 				monomeLedBuffer[led + 64] = !(led & 3) ? 5 : ((led < ((mixerArc + 1) << 2)) && (led >= (mixerArc << 2)) ? level : 0);
 		}
-		if (valueToShow == 4) // preset 0-7
+		if (valueToShow == 4) // preset 0-63
 		{
 			u8 pres = (cb << 3) + banks[cb].cp;
 			for (u8 led = 0; led < 64; led++)
@@ -879,12 +879,13 @@ void redrawArc(void)
 			for (u8 led = 0; led < 64; led++)
 				monomeLedBuffer[led + 128] = !(led & 3) ? 5 : ((led < ((mixerArc + 1) << 2)) && (led >= (mixerArc << 2)) ? level : 0);
 		}
-		if (valueToShow == 4 || arc4index == 1) // preset 0-7
+		if (valueToShow == 4 || arc4index == 1) // preset 0-63
 		{
 			u8 pres = (cb << 3) + banks[cb].cp;
 			for (u8 led = 0; led < 64; led++)
 				monomeLedBuffer[led + 192] = led == pres ? 15 : (led & 7 ? 1 : 6);
 		}
+		/*
 		if (valueToShow == 5) // scale 0-15
 		{
 			for (u8 led = 0; led < 64; led++)
@@ -893,13 +894,40 @@ void redrawArc(void)
 				monomeLedBuffer[led+128] = !(led & 3) ? 15 : ((led < ((scaleB + 1) << 2)) && (led >= (scaleB << 2)) ? 0 : 6);
 			}
 		}
+		*/
 		if (arc4index == 2) // scale page
 		{
+            u8 cv = 0;
+			u16 current, currentOn;
+			for (u8 seq = 0; seq < 4; seq++)
+			{
+				current = counter[seq] + (divisor[seq] << 6) - phase[seq];
+				currentOn = (current / divisor[seq]) & 1;
+				if (lastSelectedScale)
+					{ if ((alwaysOnB & (1 << seq)) | (currentOn && (mixerB & (1 << seq)))) cv += weight[seq]; }
+				else
+					{ if ((alwaysOnA & (1 << seq)) | (currentOn && (mixerA & (1 << seq)))) cv += weight[seq]; }
+			}
+			cv &= 0xf;
+			
+			u8 a = lastSelectedScale ? 5 : 15;
+			u8 b = lastSelectedScale ? 15 : 5;
+			if (scaleA == scaleB) a = b = 15;
+			u8 da = lastSelectedScale ? 2 : 5;
+			u8 db = lastSelectedScale ? 5 : 2;
+			if (scaleA == scaleB) da = db = 5;
+			
 			for (u8 led = 0; led < 64; led++)
 			{
-				monomeLedBuffer[led] = monomeLedBuffer[led+192] = 0;
-				monomeLedBuffer[led+64] = !(led & 3) ? 15 : ((led < ((scaleA + 1) << 2)) && (led >= (scaleA << 2)) ? 0 : 6);
-				monomeLedBuffer[led+128] = !(led & 3) ? 15 : ((led < ((scaleB + 1) << 2)) && (led >= (scaleB << 2)) ? 0 : 6);
+				monomeLedBuffer[led] = !(led & 3) ? da : ((led < ((scaleA + 1) << 2)) && (led >= (scaleA << 2)) ? a : 0);
+				monomeLedBuffer[led+64] = !(led & 3) ? db : ((led < ((scaleB + 1) << 2)) && (led >= (scaleB << 2)) ? b : 0);
+				monomeLedBuffer[led+128] = !(led & 3) ? 5 : ((led < ((arcNoteIndex + 1) << 2)) && (led >= (arcNoteIndex << 2)) ? 12 : 0);
+				monomeLedBuffer[led+128] += !(led & 3) ? 0 : ((led < ((cv + 1) << 2)) && (led >= (cv << 2)) ? 3 : 0);
+				monomeLedBuffer[led+192] = led > 60 ? 0 : led % 12 == 0 ? 4 : 1;
+				if (led == scales[lastSelectedScale ? scaleB : scaleA][arcNoteIndex]) {
+					monomeLedBuffer[led+192] += 8;
+					if (arcNoteIndex == cv) monomeLedBuffer[led+192] += 3;
+				}
 			}
 		}
 		if (valueToShow == 6) // show clock div/mult
@@ -1975,6 +2003,11 @@ static void handler_MonomeRingEnc(s32 data) {
 	{
 		if (encoderDelta[n] < 0) encoderDelta[n] += delta; else encoderDelta[n] = delta;
 	}
+	if (!isArc2 && arc4index == 2 && n < 2)
+	{
+		lastSelectedScale = n;
+		redraw();
+	}
 	
 	if (abs(encoderDelta[n]) < ENCODER_DELTA_SENSITIVITY)
 		return;
@@ -2085,6 +2118,17 @@ static void handler_MonomeRingEnc(s32 data) {
 			case 0:
 				if (arc4index == 2) // scale selection page
 				{
+					lastSelectedScale = 0;
+					if (delta > 0)
+					{
+						if (++scaleA > 15) scaleA = 0;
+					}
+					else
+					{
+						if (scaleA > 0) scaleA--; else scaleA = 15;
+					}
+					banks[cb].presets[banks[cb].cp].scaleA = scaleA;
+					showValue(0);
 					return;
 				}
 				if (!isDivisorArc)
@@ -2108,15 +2152,16 @@ static void handler_MonomeRingEnc(s32 data) {
 			case 1:
 				if (arc4index == 2) // scale selection page
 				{
+					lastSelectedScale = 1;
 					if (delta > 0)
 					{
-						if (++scaleA > 15) scaleA = 0;
+						if (++scaleB > 15) scaleB = 0;
 					}
 					else
 					{
-						if (scaleA > 0) scaleA--; else scaleA = 15;
+						if (scaleB > 0) scaleB--; else scaleB = 15;
 					}
-					banks[cb].presets[banks[cb].cp].scaleA = scaleA;
+					banks[cb].presets[banks[cb].cp].scaleB = scaleB;
 					showValue(0);
 					return;
 				}
@@ -2140,16 +2185,9 @@ static void handler_MonomeRingEnc(s32 data) {
 			case 2:
 				if (arc4index == 2) // scale selection page
 				{
-					if (delta > 0)
-					{
-						if (++scaleB > 15) scaleB = 0;
-					}
-					else
-					{
-						if (scaleB > 0) scaleB--; else scaleB = 15;
-					}
-					banks[cb].presets[banks[cb].cp].scaleB = scaleB;
-					showValue(0);
+					arcNoteIndex += 16 + (delta > 0 ? 1 : -1);
+					arcNoteIndex &= 15;
+					redraw();
 					return;
 				}
 				if (!isMixerArc)
@@ -2174,6 +2212,16 @@ static void handler_MonomeRingEnc(s32 data) {
 			case 3:
 				if (arc4index == 2) // scale selection page
 				{
+					if (delta > 0) {
+						if (scales[lastSelectedScale ? scaleB : scaleA][arcNoteIndex] < 60) 
+							scales[lastSelectedScale ? scaleB : scaleA][arcNoteIndex]++;
+					} else {
+						if (scales[lastSelectedScale ? scaleB : scaleA][arcNoteIndex] > 0) 
+							scales[lastSelectedScale ? scaleB : scaleA][arcNoteIndex]--;
+					}
+					banks[cb].presets[banks[cb].cp].scales[lastSelectedScale ? scaleB : scaleA][arcNoteIndex] =
+						scales[lastSelectedScale ? scaleB : scaleA][arcNoteIndex];
+					redraw();
 					return;
 				}
 				if (delta > 0)

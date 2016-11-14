@@ -206,10 +206,10 @@ char str[256], svalue[256];
 u8 bankToLoad = 0, presetToLoad = 0;
 
 u8 arc2index = 0; // 0 - show tracks 1&2, 1 - show tracks 3&4, 2 - show scales
-u8 arc4index = 0; // 0 - show tracks, 1 - show values, 2 - show scales
+u8 arc4index = 0; // 0 - show tracks, 1 - show values, 2 - edit scales, 3 - rotate / reset
 u8 isArc, isVb, isArc2;
 u8 gridParam = DIVISOR;
-u8 isDivisorArc = 0, isPhaseArc = 0, isMixerArc = 0, arcNoteIndex = 0;
+u8 isDivisorArc = 0, isPhaseArc = 0, isMixerArc = 0, arcNoteIndex = 0, arcRotateScale = 0, arcRotateWeights = 0;
 u64 globalCounter = 0, globalLength;
 u16 counter[4] = {0, 0, 0, 0};
 u8 triggerOn[4] = {0, 0, 0, 0};
@@ -706,7 +706,7 @@ void redrawGrid(void)
 		
 		monomeLedBuffer[14 + seqOffset] = alwaysOnA & (1 << seq) ? 15 : (mixerA & (1 << seq) ? (currentOn ? 12 : (isVb ? 6 : 15)) : 0);
 		monomeLedBuffer[15 + seqOffset] = alwaysOnB & (1 << seq) ? 15 : (mixerB & (1 << seq) ? (currentOn ? 12 : (isVb ? 6 : 15)) : 0);
-		if (gridParam == SCALE && scaleA != scaleB)
+		if (gridParam == SCALE)
 		{
 			if (lastSelectedScale)
 				monomeLedBuffer[14 + seqOffset] = 0;
@@ -912,10 +912,8 @@ void redrawArc(void)
 			
 			u8 a = lastSelectedScale ? 5 : 15;
 			u8 b = lastSelectedScale ? 15 : 5;
-			if (scaleA == scaleB) a = b = 15;
 			u8 da = lastSelectedScale ? 2 : 5;
 			u8 db = lastSelectedScale ? 5 : 2;
-			if (scaleA == scaleB) da = db = 5;
 			
 			for (u8 led = 0; led < 64; led++)
 			{
@@ -929,7 +927,34 @@ void redrawArc(void)
 					if (arcNoteIndex == cv) monomeLedBuffer[led+192] += 3;
 				}
 			}
+		} 
+		else if (arc4index == 3) // rotate / global reset
+		{
+			u8 m, step = globalCounter & 63;
+			for (u8 led = 0; led < 64; led++)
+			{
+				monomeLedBuffer[led] = (led + 16 - arcRotateScale) & 7;
+				monomeLedBuffer[led+64] = (led + 16 - arcRotateWeights) & 7;
+				
+				m = 1 << ((led >> 2) & 3);
+				switch (led & 3) {
+					case 1:
+						monomeLedBuffer[led+128] = divisor[led >> 4] & m ? 8 : 0;
+						break;
+					case 2:
+						monomeLedBuffer[led+128] = phase[led >> 4] & m ? 8 : 0;
+						break;
+					case 3:
+						monomeLedBuffer[led+128] = reset[led >> 4] & m ? 8 : 0;
+						break;
+					case 0:
+					default:
+						monomeLedBuffer[led+128] = 0;
+				}
+				monomeLedBuffer[led+192] = (led < globalReset ? ((led & 7) == 7 ? 12 : 5) : 0) + (led == step ? 3 : 0);
+			}
 		}
+		
 		if (valueToShow == 6) // show clock div/mult
 		{
 			for (u8 led = 0; led < 64; led++)
@@ -1083,6 +1108,7 @@ u8 isTrackDead(u8 divisor, u8 phase, u8 reset, u8 globalReset)
 	u8 res = min(reset, globalReset);
 	if (!res) res = max(reset, globalReset);
 	if (!res) return 0;
+	if (res == 1 && globalReset == 1) return 0;
 
 	u8 prevValue = (((divisor << 6) - phase) / divisor) & 1, value, dead = 1;
 	
@@ -1173,33 +1199,33 @@ void mutate(void)
 				div = divisor[index];
 				if (random8() & 1)
 				{
-					if (div > 1) div--;
+					if (div > 1) div--; else div++;
 				}
 				else
 				{
-					if (div < 16) div++;
+					if (div < 16) div++; else div--;
 				}
 				break;
 			case 1:
 				ph = phase[index];
 				if (random8() & 1)
 				{
-					if (ph > 0) ph--;
+					if (ph > 0) ph--; else ph++;
 				}
 				else
 				{
-					if (ph < 16) ph++;
+					if (ph < 16) ph++; else ph--;
 				}
 				break;
 			case 2:
 				res = reset[index];
 				if (random8() & 1)
 				{
-					if (res > 0) res--;
+					if (res > 0) res--; else res++;
 				}
 				else
 				{
-					if (res < 16) res++;
+					if (res < 16) res++; else res--;
 				}
 				break;
 		}
@@ -1715,10 +1741,12 @@ static void handler_Front(s32 data) {
 			}
 			else
 			{
-				if (++arc4index == 3) arc4index = 0;
+				if (++arc4index == 4) arc4index = 0;
 			}
+			redraw();
 		}
 		
+		/*
         if (frontClicked) // double click
         {
             for (u8 i = 0; i < 16; i++)
@@ -1728,7 +1756,7 @@ static void handler_Front(s32 data) {
             }
             for (u8 i = 0; i < 64; i++) clrMutateSeq(i);
             for (u8 i = 0; i < 4; i++) banks[cb].presets[banks[cb].cp].chance[i] = chance[i] = banks[cb].presets[banks[cb].cp].reset[i] = reset[i] = 0;
-            banks[cb].presets[banks[cb].cp].globalReset = globalReset = globalCounter = counter[0] = counter[1] = counter[2] = counter[3] = 0;
+            globalCounter = counter[0] = counter[1] = counter[2] = counter[3] = 0;
             updateglobalLength();
 			frontClicked = 0;
             redraw();
@@ -1739,6 +1767,7 @@ static void handler_Front(s32 data) {
 			if (!isArc) gridParam = COUNTERS;
             showValue(0);
         }
+		*/
 	}
 	else {
 		front_timer = 0;
@@ -2131,6 +2160,14 @@ static void handler_MonomeRingEnc(s32 data) {
 					showValue(0);
 					return;
 				}
+				if (arc4index == 3) // rotate / mutate / global reset
+				{
+					arcRotateScale += 16 + (delta > 0 ? 1 : -1);
+					arcRotateScale &= 15;
+					rotateScales(delta > 0 ? 1 : -1);
+					redraw();
+					return;
+				}
 				if (!isDivisorArc)
 				{
 					isDivisorArc = 1;
@@ -2165,6 +2202,14 @@ static void handler_MonomeRingEnc(s32 data) {
 					showValue(0);
 					return;
 				}
+				if (arc4index == 3) // rotate / mutate / global reset
+				{
+					arcRotateWeights += 16 + (delta > 0 ? 1 : -1);
+					arcRotateWeights &= 15;
+					rotateWeights_(delta > 0 ? 1 : -1);
+					redraw();
+					return;
+				}
 				if (!isPhaseArc)
 				{
 					isPhaseArc = 1;
@@ -2187,6 +2232,13 @@ static void handler_MonomeRingEnc(s32 data) {
 				{
 					arcNoteIndex += 16 + (delta > 0 ? 1 : -1);
 					arcNoteIndex &= 15;
+					redraw();
+					return;
+				}
+				if (arc4index == 3) // rotate / mutate / global reset
+				{
+					generateRandom(8, 1);
+					adjustAllCounters();
 					redraw();
 					return;
 				}
@@ -2221,6 +2273,17 @@ static void handler_MonomeRingEnc(s32 data) {
 					}
 					banks[cb].presets[banks[cb].cp].scales[lastSelectedScale ? scaleB : scaleA][arcNoteIndex] =
 						scales[lastSelectedScale ? scaleB : scaleA][arcNoteIndex];
+					redraw();
+					return;
+				}
+				if (arc4index == 3) // rotate / mutate / global reset
+				{
+					if (delta > 0) {
+						if (globalReset < 64) globalReset++;
+					} else {
+						if (globalReset > 0) globalReset--;
+					}
+					banks[cb].presets[banks[cb].cp].globalReset = globalReset;
 					redraw();
 					return;
 				}
@@ -2470,7 +2533,7 @@ static void handler_MonomeGridKey(s32 data)
 	{
 		if (gridParam == SCALE)
 		{
-			if (lastSelectedScale && scaleA != scaleB)
+			if (lastSelectedScale)
 			{
 				lastSelectedScale = 0;
 				redraw();
@@ -2500,7 +2563,7 @@ static void handler_MonomeGridKey(s32 data)
 	{
 		if (gridParam == SCALE)
 		{
-			if (!lastSelectedScale && scaleA != scaleB)
+			if (!lastSelectedScale)
 			{
 				lastSelectedScale = 1;
 				redraw();

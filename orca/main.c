@@ -928,14 +928,13 @@ void redrawArc(void)
 				}
 			}
 		} 
-		else if (arc4index == 3) // rotate / global reset
+		else if (arc4index == 3) // rotate / mutate / global reset
 		{
 			u8 m, step = globalCounter & 63;
 			for (u8 led = 0; led < 64; led++)
 			{
-				monomeLedBuffer[led] = (led + 16 - arcRotateScale) & 7;
-				monomeLedBuffer[led+64] = (led + 16 - arcRotateWeights) & 7;
-				
+				monomeLedBuffer[led] = !(led & 3) ? (led >> 2 < 2 ? 2 : led >> 2): ((led < ((arcRotateScale + 1) << 2)) && (led >= (arcRotateScale << 2)) ? ((led & 3) << 2) + 3 : 0);
+				monomeLedBuffer[led+64] = (led < ((arcRotateWeights + 1) << 4)) && (led >= (arcRotateWeights << 4)) ? led & 15 : 0;
 				m = 1 << ((led >> 2) & 3);
 				switch (led & 3) {
 					case 1:
@@ -2204,8 +2203,8 @@ static void handler_MonomeRingEnc(s32 data) {
 				}
 				if (arc4index == 3) // rotate / mutate / global reset
 				{
-					arcRotateWeights += 16 + (delta > 0 ? 1 : -1);
-					arcRotateWeights &= 15;
+					arcRotateWeights += delta > 0 ? 5 : 3;
+					arcRotateWeights &= 3;
 					rotateWeights_(delta > 0 ? 1 : -1);
 					redraw();
 					return;

@@ -297,6 +297,7 @@ static void orca_process_ii(uint8_t *data, uint8_t l);
 static void usb_stick_save(void);
 static void usb_stick_load(void);
 static void usb_stick(u8 includeLoading);
+static char* _itoa(int value, char* result, int base);
 void process_line(void);
 void usb_write_str(char* str);
 void usb_write_param(char* name, u16 value, int base);
@@ -3022,7 +3023,7 @@ void usb_write_param(char* name, u16 value, int base)
 {
 	file_write_buf((uint8_t*) name, strlen(name));
 	file_putc(':');	file_putc(' ');
-	itoa(value, str, base);
+	_itoa(value, str, base);
 	if (base == 2)
 	{
 		for (s8 i = strlen(str) - 1; i >= 0; i--) file_putc(str[i]);
@@ -3041,7 +3042,7 @@ void usb_write_u8_array(char* name, u8* array, u8 length, int base, u8 padding)
 	file_putc(':');	file_putc(' ');
 	for (u8 i = 0; i < length; i++)
 	{
-		itoa(array[i], str, base);
+		_itoa(array[i], str, base);
 		if (base == 2)
 		{
 			for (s8 i = strlen(str) - 1; i >= 0; i--) file_putc(str[i]);
@@ -3062,7 +3063,7 @@ void usb_write_s8_array(char* name, s8* array, u8 length)
 	file_putc(':');	file_putc(' ');
 	for (u8 i = 0; i < length; i++)
 	{
-		itoa(array[i], str, 10);
+		_itoa(array[i], str, 10);
 		file_write_buf((uint8_t*) str, strlen(str));
 		if (i != length - 1) { file_putc(','); file_putc(' '); }
 	}
@@ -3073,7 +3074,7 @@ static void usb_stick_save()
 {
 	// file must be open for writing prior to calling this
 
-	strcpy(str, "orca v2.4\n\n"); file_write_buf((uint8_t*) str, strlen(str));
+	strcpy(str, "orca v2.6\n\n"); file_write_buf((uint8_t*) str, strlen(str));
 	
 	usb_write_u8_array("shared scale  1", userScalePresets[0], 16, 10, 0);
 	usb_write_u8_array("shared scale  2", userScalePresets[1], 16, 10, 0);
@@ -3321,19 +3322,69 @@ void load_u8_array_bin(char* s, u8* array, u8 len, u8 min, u8 max)
     }
 }
 
+// http://www.jb.man.ac.uk/~slowe/cpp/itoa.html
+// http://embeddedgurus.com/stack-overflow/2009/06/division-of-integers-by-constants/
+// http://codereview.blogspot.com/2009/06/division-of-integers-by-constants.html
+// http://homepage.cs.uiowa.edu/~jones/bcd/divide.html
+/**
+	 * C++ version 0.4 char* style "itoa":
+	 * Written by Lukás Chmela
+	 * Released under GPLv3.
+	 */
+char* _itoa(int value, char* result, int base) {
+	// check that the base if valid
+	// removed for optimization
+	// if (base < 2 || base > 36) { *result = '\0'; return result; }
+
+	char* ptr = result, *ptr1 = result, tmp_char;
+	int tmp_value;
+	uint8_t inv = 0;
+
+	// add: opt crashes on negatives
+	if(value<0) {
+		value = -value;
+		inv++;
+	}
+
+	do {
+		tmp_value = value;
+		// opt-hack for base 10 assumed
+		// value = (((uint16_t)value * (uint16_t)0xCD) >> 8) >> 3;
+		// value = (((uint32_t)value * (uint32_t)0xCCCD) >> 16) >> 3;
+		value /= base;
+		*ptr++ = "zyxwvutsrqponmlkjihgfedcba9876543210123456789abcdefghijklmnopqrstuvwxyz" [35 + (tmp_value - value * base)];
+	} while ( value );
+
+	// Apply negative sign
+	if(inv) *ptr++ = '-';
+	*ptr-- = '\0';
+	while(ptr1 < ptr) {
+		tmp_char = *ptr;
+		*ptr--= *ptr1;
+		*ptr1++ = tmp_char;
+	}
+	return result;
+}
+
 void process_line()
 {
 	if (!strcmp(str, "bank"))
 	{
 		bankToLoad = load_u8(svalue, 1, 8) - 1;
+        // print_dbg("bank: ");
+        // print_dbg_ulong(bankToLoad);
+        // print_dbg("\r\n");
 	}
 	else if (!strcmp(str, "preset"))
 	{
 		presetToLoad = load_u8(svalue, 1, 8) - 1;
+        // print_dbg("preset: ");
+        // print_dbg_ulong(presetToLoad);
+        // print_dbg("\r\n");
 	}
 	else if (!strcmp(str, "div"))
-		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].divisor, 4, 1, 16);
-	else if (!strcmp(str, "phase"))
+        load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].divisor, 4, 1, 16);
+    else if (!strcmp(str, "phase"))
 		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].phase, 4, 0, 16);
 	else if (!strcmp(str, "reset"))
 		load_u8_array(svalue, banks[bankToLoad].presets[presetToLoad].reset, 4, 0, 16);
@@ -3548,6 +3599,7 @@ void process_line()
 static void usb_stick_load()
 {
 	// file must be open prior to calling this
+    // print_dbg("\r\nUSB STICK READ\r\n\r\n");
 	
 	char c;
 	u8 is_value, param_i, value_i;

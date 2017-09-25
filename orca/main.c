@@ -3643,118 +3643,107 @@ static void usb_stick_load()
 
 static void usb_stick(u8 includeLoading)
 {
-	uint8_t usb_retry = 10;
-	uint8_t lun, lun_state = 0;
-	
-	while (usb_retry--)
-	{
-		if (uhi_msc_is_available())
-		{
-			if (!includeLoading)
-			{
-				char filename[13];
-				strcpy(filename, "orca_s0.txt");
-				for (u8 i = 0; i < 10; i++)
-				{
-					filename[6] = '0' + i;
-					if (nav_file_create((FS_STRING) filename)) break;
-				}
-				
-				if (file_open(FOPEN_MODE_W)) 
-				{
-					usb_stick_save();
-					file_close();
-					nav_filelist_reset();
-					nav_exit();
-					usb_retry = 0;
-				}
-			}
-		}
-		else
-		{
-			for (lun = 0; (lun < uhi_msc_mem_get_lun()) && (lun < 8); lun++)
-			{
-				// Mount drive
-				nav_drive_set(lun);
-				if (!nav_partition_mount())
-				{
-					if (fs_g_status == FS_ERR_HW_NO_PRESENT)
-					{
-						// The test can not be done, if LUN is not present
-						lun_state &= ~(1 << lun); // LUN test reseted
-						continue;
-					}
-					lun_state |= (1 << lun); // LUN test is done.
-					// ui_test_finish(false); // Test fail
-					continue;
-				}
-				// Check if LUN has been already tested
-				if (lun_state & (1 << lun))
-				{
-					continue;
-				}
+    //print_dbg("usb_stick\r\n\r\n");
+    
+    debug[0] = debug[1] = debug[2] = debug[3] = 0;
+    
+    u8 exit;
+    u8 wp = 0;
+    u8 max_lun = uhi_msc_mem_get_lun();
+    if (max_lun < 1) max_lun = 1;
+    if (max_lun > 16) max_lun = 16;
+    max_lun = 16;
+    
+    for (uint8_t lun = 0; lun < max_lun; lun++) {
+        delay_ms(100);
+        //print_dbg("lun: "); print_dbg_ulong(lun); print_dbg("\r\n");
+        
+        debug[0] |= 1 << lun;
 
-				char filename[13];
+        // mount drive
+        nav_drive_set(lun);
+        if (!nav_partition_mount()) {
+            //print_dbg("1 \r\n");
+            if (fs_g_status == FS_ERR_HW_NO_PRESENT) {
+                //print_dbg("2 \r\n");
+                debug[1] |= 1 << lun;
+                continue;
+            }
+            debug[2] = fs_g_status;
+            //print_dbg("3, status: "); print_dbg_ulong(fs_g_status); print_dbg("\r\n");
+            continue;
+        }
 
-				// save
-				strcpy(filename, "orca_s0.txt");
-				u8 contAfterBreak = 0;
-				for (u8 i = 0; i < 10; i++)
-				{
-					filename[6] = '0' + i;
-					if (nav_file_create((FS_STRING) filename)) break;
-					if (fs_g_status != FS_ERR_FILE_EXIST)
-					{
-						contAfterBreak = 1;
-						if (fs_g_status == FS_LUN_WP)
-						{
-							// Test can be done only on no write protected device
-							break;
-						}
-						lun_state |= (1 << lun); // LUN test is done.
-						break;
-					}
-				}
-				if (contAfterBreak) continue;
-				
-				if (!file_open(FOPEN_MODE_W))
-				{
-					if (fs_g_status == FS_LUN_WP)
-					{
-						// Test can be done only on no write protected device
-						continue;
-					}
-					lun_state |= (1 << lun); // LUN test is done.
-					continue;
-				}
-				
-				usb_stick_save();
-				file_close();
-				nav_filelist_reset();
-				
-				lun_state |= (1 << lun); // LUN test is done.
-				
-				// read
-				if (includeLoading)
-				{
-					strcpy(filename,"orca.txt");
-					if (nav_filelist_findname(filename, 0))
-					{
-						if(file_open(FOPEN_MODE_R))
-						{
-							usb_stick_load();
-							file_close();
-						}
-					}
-				}
-			}
+        print_dbg("4 \r\n");
+        
+        // write
+        char filename[13];
+        strcpy(filename, "orca_s0.txt");
+        exit = 0;
+        for (u8 i = 0; i < 10; i++)
+        {
+            filename[6] = '0' + i;
+            if (nav_file_create((FS_STRING)filename)) break;
+            if (fs_g_status == FS_ERR_FILE_EXIST) continue;
+            
+            if (fs_g_status == FS_LUN_WP) {
+                wp = 1;
+                print_dbg("5 \r\n");
+            } else {
+                debug[2] = fs_g_status;
+                print_dbg("6, status: "); print_dbg_ulong(fs_g_status); print_dbg("\r\n");
+            }
+            
+            exit = 1;
+            break;
+        }
+        if (exit) continue;
+        
+        if (!file_open(FOPEN_MODE_W)) {
+            if (fs_g_status == FS_LUN_WP) {
+                wp = 1;
+                print_dbg("7 \r\n");
+            } else {
+                debug[2] = fs_g_status;
+                print_dbg("8, status: "); print_dbg_ulong(fs_g_status); print_dbg("\r\n");
+            }
+            continue;
+        }
 
-			nav_exit();
-			usb_retry = 0;
-		}
+        print_dbg("9 \r\n");
+        usb_stick_save();
+        file_close();
+        nav_filelist_reset();
+        debug[3] |= 0b110000000000;
+        
+        print_dbg("10 \r\n");
+        // read
+        if (includeLoading)
+        {
+            strcpy(filename,"orca.txt");
+            if (nav_filelist_findname(filename, 0)) {
+                print_dbg("11 \r\n");
+                if (file_open(FOPEN_MODE_R)) {
+                    print_dbg("12 \r\n");
+                    usb_stick_load();
+                    file_close();
+                    debug[3] |= 0b100000000000;
+                    print_dbg("13 \r\n");
+                } else {
+                    debug[3] |= fs_g_status;
+                }
+            } else {
+                debug[3] |= fs_g_status;
+                debug[3] = -debug[3];
+                print_dbg("14, status: "); print_dbg_ulong(fs_g_status); print_dbg("\r\n");
+            }
+        }
 
-		delay_ms(100);
+        nav_exit();
+        break;
 	}
+    
+    gridParam = DEBUG;
 }
 
 // flash commands

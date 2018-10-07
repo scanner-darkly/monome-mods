@@ -3785,8 +3785,6 @@ static void usb_stick(u8 includeLoading)
         nav_exit();
         break;
 	}
-    
-    gridParam = DEBUG;
 }
 
 // flash commands

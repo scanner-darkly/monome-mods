@@ -62,8 +62,9 @@
 #define COUNTERS 12
 #define DEBUG 13
 #define CONFIRMSAVE 14
-
 #define CLOCK_DIV_MULT_COUNT 15
+#define CONTROLPAGE 16
+
 #define AVERAGING_TAPS 3
 
 const s8 CLOCK_DIV_MULT[CLOCK_DIV_MULT_COUNT] = {-8, -7, -6, -5, -4, -3, -2, 1, 2, 3, 4, 5, 6, 7, 8};
@@ -250,6 +251,7 @@ u8 mixerA, mixerB, alwaysOnA, alwaysOnB;
 s8 rotateScale[16], rotateWeights[16]; 
 u8 mutateSeq[8];
 u8 globalReset;
+u8 rotateScaleA, rotateScaleB, transposeA, transposeB;
 
 u8 userScalePresets[16][16];
 u8 divisor_presets[16][4];
@@ -326,8 +328,8 @@ u8 random8(void);
 void generateChaos(void);
 void generateRandom(u8 max, u8 paramCount);
 void mutate(void);
-void rotateScaleA(s8 amount);
-void rotateScaleB(s8 amount);
+void _rotateScaleA(s8 amount);
+void _rotateScaleB(s8 amount);
 void rotateScales(s8 amount);
 void rotateWeights_(s8 amount);
 void loadPreset(u8 b, u8 p);
@@ -405,7 +407,18 @@ void redrawGrid(void)
 	monomeLedBuffer[34] = getMutateSeq(globalCounter & 63) != 0 && showTriggersG ? 10 : 5;
 	monomeLedBuffer[50] = globalReset && !globalCounter && showTriggersG ? 10 : 5;
 
-    if (gridParam == COUNTERS)
+    if (gridParam == CONTROLPAGE)
+    {
+        for (u8 led = 0; led < 16; led++)
+            monomeLedBuffer[64+led] = led < transposeA ? 15 : 0;
+        for (u8 led = 0; led < 16; led++)
+            monomeLedBuffer[80+led] = led < transposeB ? 15 : 0;
+        for (u8 led = 0; led < 16; led++)
+            monomeLedBuffer[96+led] = led < rotateScaleA ? 15 : 0;
+        for (u8 led = 0; led < 16; led++)
+            monomeLedBuffer[112+led] = led < rotateScaleB ? 15 : 0;
+    }
+    else if (gridParam == COUNTERS)
     {
 		for (u8 i = 0; i < 4; i++)
 			for (u8 led = 0; led < 16; led++)
@@ -1002,8 +1015,15 @@ void updateCVOutputs(u8 fromClock)
 			}
 		}
 	
-		cv0 = CHROMATIC[scales[scaleA][cvA & 0xf]];
-		cv1 = CHROMATIC[scales[scaleB][cvB & 0xf]];
+		u8 note;
+        
+        note = scales[scaleA][(cvA + rotateScaleA) & 0xf];
+        if (note + transposeA < NOTEMAX) note += transposeA;
+        cv0 = CHROMATIC[note];
+
+        note = scales[scaleB][(cvB + rotateScaleB) & 0xf];
+        if (note + transposeB < NOTEMAX) note += transposeB;
+        cv1 = CHROMATIC[note];
 	}
 
 	// write to DAC
@@ -1240,7 +1260,7 @@ void mutate(void)
 	}
 }
 
-void rotateScaleA(s8 amount)
+void _rotateScaleA(s8 amount)
 {
 	u8 tempScale;
 	if (amount < 0)
@@ -1292,7 +1312,7 @@ void rotateScaleA(s8 amount)
 	for (u8 j = 0; j < 16; j++) banks[cb].presets[banks[cb].cp].scales[scaleA][j] = scales[scaleA][j];
 }
 
-void rotateScaleB(s8 amount)
+void _rotateScaleB(s8 amount)
 {
 	u8 tempScale;
 	if (amount < 0)
@@ -1346,8 +1366,8 @@ void rotateScaleB(s8 amount)
 
 void rotateScales(s8 amount)
 {
-	rotateScaleA(amount);
-	if (scaleA != scaleB) rotateScaleB(amount);
+	_rotateScaleA(amount);
+	if (scaleA != scaleB) _rotateScaleB(amount);
 }
 
 void rotateWeights_(s8 amount)
@@ -2446,11 +2466,11 @@ static void handler_MonomeGridKey(s32 data)
 		}
 		else if ((noteSquarePressedCol + 1 == x) && (noteSquarePressedRow == y - 3))
 		{
-			if (lastSelectedScale) rotateScaleB(1); else rotateScaleA(1);
+			if (lastSelectedScale) _rotateScaleB(1); else _rotateScaleA(1);
 		}
 		else if ((noteSquarePressedCol == x + 1) && (noteSquarePressedRow == y - 5))
 		{
-			if (lastSelectedScale) rotateScaleB(-1); else rotateScaleA(-1);
+			if (lastSelectedScale) _rotateScaleB(-1); else _rotateScaleA(-1);
 		}
 
 		if (isScalePreview) updateCVOutputs(0);
@@ -2589,11 +2609,34 @@ static void handler_MonomeGridKey(s32 data)
 		return;
 	}
 	
-	if (y < 4) return;
+	if (y < 4)
+    {
+        gridParam = CONTROLPAGE;
+        redraw();
+        return;
+    }
 	
 	// param editing, bottom 4 rows
 	
-	if (gridParam == SCALE)
+	if (gridParam == CONTROLPAGE)
+    {
+        switch (y - 4)
+        {
+            case 0:
+                transposeA = transposeA == x + 1 ? 0 : x + 1;
+                break;
+            case 1:
+                transposeB = transposeB == x + 1 ? 0 : x + 1;
+                break;
+            case 2:
+                rotateScaleA = rotateScaleA == x + 1 ? 0 : x + 1;
+                break;
+            case 3:
+                rotateScaleB = rotateScaleB == x + 1 ? 0 : x + 1;
+                break;
+        }
+    }
+    else if (gridParam == SCALE)
 	{
 		if (scalePressed)
 		{
